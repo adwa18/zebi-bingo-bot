@@ -28,10 +28,10 @@ from telegram.ext import (
 app = Flask(__name__)  # Added Flask initialization
 
 # --- Configuration ---
-TOKEN = os.environ.get('TOKEN', '8119390210:AAFjN2YTSaPEyae9N9otMZ6kaNoo4-gns18')
-WEB_APP_URL = os.environ.get('WEB_APP_URL', 'https://bingo-webapp.vercel.app')
-ADMIN_IDS = [int(x) for x in os.environ.get('ADMIN_IDS', '5380773431').split(',')]
-DATABASE_URL = os.environ.get('DATABASE_URL')
+TOKEN = os.environ.get()
+WEB_APP_URL = os.environ.get()
+ADMIN_IDS = [int(x) for x in os.environ.get().split(',')]
+DATABASE_URL = os.environ.get()
 BACK_BUTTON_TEXT = "🔙 Back"
 
 # Initialize logging
