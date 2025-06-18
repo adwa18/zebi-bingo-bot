@@ -488,7 +488,7 @@ def webhook():
 # --- Set Webhook ---
 @app.route("/setwebhook", methods=["GET"])
 def set_webhook():
-    webhook_url = f"https://zebi-bingo-5ofgpesiv-tewodros-ephrems-projects.vercel.app/{TOKEN}"  # Updated: Default domain
+    webhook_url = f"https://zebi-bingo-bot.vercel.app/{TOKEN}"  # Updated: Default domain
     try:
         application.bot.set_webhook(webhook_url)
         return "Webhook set" 
