@@ -28,10 +28,10 @@ from telegram.ext import (
 app = Flask(__name__)  # Added Flask initialization
 
 # --- Configuration ---
-TOKEN = os.environ.get()
-WEB_APP_URL = os.environ.get()
-ADMIN_IDS = [int(x) for x in os.environ.get().split(',')]
-DATABASE_URL = os.environ.get()
+TOKEN = os.environ.get("TOKEN")
+WEB_APP_URL = os.environ.get("WEB_APP_URL")
+ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(',') if x]
+DATABASE_URL = os.environ.get("DATABASE_URL")
 BACK_BUTTON_TEXT = "🔙 Back"
 
 # Initialize logging
@@ -480,17 +480,20 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Webhook Handler ---
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     update = Update.de_json(request.get_json(), application.bot)
-    await application.process_update(update)
+    application.process_update(update)
     return "OK", 200
 
 # --- Set Webhook ---
 @app.route("/setwebhook", methods=["GET"])
 def set_webhook():
-    webhook_url = f"https://{os.getenv('VERCEL_URL', 'zebi-bingo-bot.vercel.app')}/{TOKEN}"  # Updated: Default domain
-    success = application.bot.set_webhook(webhook_url)
-    return "Webhook set" if success else "Failed to set webhook"
+    webhook_url = f"https://zebi-bingo-5ofgpesiv-tewodros-ephrems-projects.vercel.app/{TOKEN}"  # Updated: Default domain
+    try:
+        application.bot.set_webhook(webhook_url)
+        return "Webhook set" 
+    except Exception as e:
+        return f"Failed to set webhook: {str(e)}"
 
 # --- Initialize Handlers ---
 def setup_handlers():
@@ -517,4 +520,3 @@ application = ApplicationBuilder().token(TOKEN).build()  # Added: Define applica
 if __name__ == "__main__":
     init_db()
     setup_handlers()
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
