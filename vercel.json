@@ -1,16 +1,5 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/bot.py",
-      "use": "@vercel/python",
-      "config": { "maxLambdaSize": "15mb" }
-    },
-    {
-      "src": "bingo_welcome.png",
-      "use": "@vercel/static"
-    }
-  ],
   "routes": [
     {
       "src": "/(.*)",
