@@ -5,7 +5,7 @@ import string
 import os
 from datetime import datetime
 from flask import Flask, request
-from telegram.error import BadRequest, Unauthorized, TimedOut
+from telegram.error import BadRequest, Forbidden, TimedOut
 from telegram import (
     Update,
     WebAppInfo,
@@ -469,7 +469,7 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for user_id, in cursor.fetchall():
             try:
                 await context.bot.send_message(chat_id=user_id, text=f"📢 {message}")
-            except (BadRequest, Unauthorized, TimedOut) as e:
+            except (BadRequest, Forbidden, TimedOut) as e:
                 logger.warning(f"Failed to send broadcast to user {user_id}: {str(e)}")
                 continue
             except Exception as e:
