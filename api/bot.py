@@ -41,6 +41,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.route("/test", methods=["GET"])
+def test():
+    logger.info("Test endpoint accessed")
+    return "Server is running"
+
 # --- Database Functions ---
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
