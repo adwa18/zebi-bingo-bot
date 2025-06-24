@@ -3,7 +3,8 @@
   "builds": [
     {
       "src": "bot.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": { "command": "gunicorn bot:app" }
     },
     {
       "src": "public/**",
@@ -12,15 +13,12 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "bot.py"
+      "src": "/(.*\\.(html|css|js|ico))",
+      "dest": "public/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "public/$1"
+      "dest": "bot.py"
     }
-  ],
-  "env": {
-    "PYTHON_VERSION": "3.10"
-  }
+  ]
 }
