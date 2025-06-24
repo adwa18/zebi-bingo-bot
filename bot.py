@@ -1603,11 +1603,11 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in error_handler: {str(e)}")
 
-def main():
+async def main():
     init_db()
     while True:
         try:
-            application = ApplicationBuilder().token(TOKEN).build()
+            application = Application.builder().token(TOKEN).build()
             application.add_handler(CommandHandler("start", start))
             application.add_handler(CommandHandler("admin", admin))
             application.add_handler(CallbackQueryHandler(instructions, pattern='instructions'))
@@ -1624,7 +1624,7 @@ def main():
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_deposit_amount), group=2)
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_admin_input), group=3)
             application.add_error_handler(error_handler)
-            application.run_polling()
+            await application.run_polling()
 
         except Exception as e:
             logger.error(f"Bot polling crashed: {str(e)}", exc_info=True)
@@ -1636,6 +1636,9 @@ def main():
 
 if __name__ == '__main__':
     from threading import Thread
-    Thread(target=main).start()
+    import asyncio
+    def run_bot():
+        asyncio.run(main())
+    Thread(target=run_bot).start()
     
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
