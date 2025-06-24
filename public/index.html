@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ዜቢ ቢንጎ</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <img src="/logo.png" alt="Zebi Bingo Logo" class="logo">
+            <h1>ዜቢ ቢንጎ</h1>
+            <div id="playerInfo" style="position: absolute; top: 1rem; left: 1rem;">👤 Loading...</div>
+            <label class="night-mode-toggle">
+                <input type="checkbox" id="nightModeSwitch" aria-label="Toggle Night Mode"> 🌙 Night Mode
+            </label>
+        </header>
+        <div id="loadingPage" class="content" style="display: flex;">
+            <h2>Loading...</h2>
+            <div class="loader"></div>
+        </div>
+        <div id="errorPage" class="content" style="display: none;">
+            <h2>Error</h2>
+            <p id="errorMessage">An error occurred.</p>
+            <button onclick="checkRegistration()">Retry</button>
+            <button id="returnToBotBtn">Return to Bot</button>
+        </div>
+        <div id="welcomePage" class="content" style="display: none;">
+            <h2>እንኳን ወደ ዜቢ ቢንጎ በደህና መጡ!</h2>
+            <p>አስደሳች የቢንጎ ጨዋታ ይቀላቀሉ!</p>
+            <button id="startBtn" class="primary-btn">ጀምር</button>
+        </div>
+        <div id="registerPage" class="content" style="display: none;">
+            <h2>ይመዝገቡ</h2>
+            <div class="form-group">
+                <input id="phoneInput" type="tel" placeholder="ስልክ ቁጥር" required>
+            </div>
+            <div class="form-group">
+                <input id="usernameInput" type="text" placeholder="የተጠቃሚ ስም" required>
+            </div>
+            <div class="form-group">
+                <input id="referralInput" type="text" placeholder="የሪፈራል ኮድ (አማራጭ)">
+            </div>
+            <button id="registerBtn" class="primary-btn">መዝግብ</button>
+            <p id="registerError" style="color: red;"></p>
+        </div>
+        <div id="mainPage" class="content" style="display: none;">
+            <header>
+                <div id="playerInfo"></div>
+                <button id="adminMenuBtn" style="display: none;">🛠 አስተዳዳሪ</button>
+                <button id="createGameBtn" style="display: none;">🎮 ጨዋታ ፍጠር</button>
+            </header>
+            <div class="game-container">
+                <h2>የጨዋታ መደብ ይምረጡ</h2>
+                <div class="game-mode-buttons">
+                    <button class="gameModeBtn" onclick="joinGame(10)">10 ETB</button>
+                    <button class="gameModeBtn" onclick="joinGame(50)">50 ETB</button>
+                    <button class="gameModeBtn" onclick="joinGame(100)">100 ETB</button>
+                    <button class="gameModeBtn" onclick="joinGame(200)">200 ETB</button>
+                </div>
+                <button id="joinBtn" class="primary-btn">ተቀላቀል</button>
+            </div>
+            <nav class="menu">
+                <button id="checkBalance">💰 የዋሌት ገጽ</button>
+                <button id="withdrawMoney">💸 ገንዘብ ለማውጣት</button>
+                <button id="topLeaders">🏆 የመሪዎች ዝርዝር</button>
+                <button id="inviteFriends">👥 ጓደኞችን ጋብዝ</button>
+            </nav>
+        </div>
+        <div id="gameArea" class="content" style="display: none;">
+            <div id="gameStatus"></div>
+            <div id="calledNumbers"></div>
+            <div id="bingoCard" class="bingo-card"></div>
+            <div class="game-actions">
+                <button id="callBtn" class="action-btn">📢 Call Number</button>
+                <button id="bingoBtn" class="action-btn">🎉 BINGO!</button>
+            </div>
+        </div>
+        <div id="content" class="content" style="display: none;"></div>
+        <footer>
+            <div class="footer-content">
+                <p id="devInfo">Developed by Benzion Creatives 2025</p>
+                <label class="theme-switch">
+                    <input type="checkbox" id="nightModeSwitch">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
