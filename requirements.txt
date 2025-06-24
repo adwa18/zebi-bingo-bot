@@ -1,5 +1,5 @@
 flask==2.3.2
-python-telegram-bot==20.7
+python-telegram-bot==13.7
 gunicorn==21.2.0
 requests==2.31.0
-logging==0.5.1.2
+psycopg2-binary==2.9.3
