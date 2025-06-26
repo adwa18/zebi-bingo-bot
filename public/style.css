@@ -50,13 +50,13 @@ body.night-mode {
 /* Content Sections */
 .content {
     display: none;
-    flex: 1;
+    min-height: 100vh;
     padding: 15px;
     flex-direction: column;
 }
 
-.content[style*="display: flex"], .content[style*="display: block"] {
-    display: flex !important;
+.content.active {
+    display: flex;
 }
 
 /* Loading State */
@@ -83,10 +83,15 @@ body.night-mode .loader {
 
 /* Error State */
 #errorPage {
+    display: none;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
     gap: 15px;
+    min-height: 100vh;
+    background-color: var(--bg-color);
+    color: var(--text-color);
 }
 
 #errorPage button {
@@ -482,16 +487,13 @@ body.night-mode footer {
     background-color: var(--night-primary);
 }
 
-/* Night Mode Toggle */
-.night-mode-toggle {
+.theme-switch {
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 0.9rem;
-    cursor: pointer;
 }
-
-.night-mode-toggle input {
+.theme-switch input {
     position: relative;
     width: 40px;
     height: 20px;
@@ -503,12 +505,10 @@ body.night-mode footer {
     transition: background 0.3s;
     cursor: pointer;
 }
-
-.night-mode-toggle input:checked {
+.theme-switch input:checked {
     background: var(--accent-color);
 }
-
-.night-mode-toggle input:before {
+.theme-switch input:before {
     content: '';
     position: absolute;
     width: 18px;
@@ -519,8 +519,7 @@ body.night-mode footer {
     background: white;
     transition: transform 0.3s;
 }
-
-.night-mode-toggle input:checked:before {
+.theme-switch input:checked:before {
     transform: translateX(20px);
 }
 
@@ -571,6 +570,16 @@ input:checked + .slider:before {
     .cell {
         font-size: 0.9rem;
     }
+    #app {
+        padding: 0.5rem;
+    }
+    #playerInfo {
+        font-size: 0.9rem;
+    }
+    h2 {
+        font-size: 1.5rem;
+    }    
+
 }
 
 /* Animations */

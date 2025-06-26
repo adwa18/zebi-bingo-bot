@@ -5,7 +5,7 @@ if (tg) {
     tg.setViewportHeight(window.innerHeight);
 }
 const userId = (tg?.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('user_id'))?.toString();
-const API_URL = 'https://zebi-bingo-bot.vercel.app';
+const API_URL = '/api';
 const playerInfo = document.getElementById('playerInfo');
 let gameId = null;
 let selectedNumber = null;
@@ -15,17 +15,21 @@ let currentBet = null;
 if (!userId) {
     console.error('No user ID found');
     showErrorPage('User ID is missing');
+    return;
 }
 
 // DOM Elements
 const welcomePage = document.getElementById('welcomePage');
 const registerPage = document.getElementById('registerPage');
-const returnToBotBtn = document.getElementById('returnToBot');
-const checkBalanceBtn = document.getElementById('checkBalance');
-const withdrawMoneyBtn = document.getElementById('withdrawMoney');
-const topLeadersBtn = document.getElementById('topLeaders');
-const inviteFriendsBtn = document.getElementById('inviteFriends');
-const adminMenuBtn = document.getElementById('adminMenu');
+const returnToBotBtn = document.getElementById('returnToBotBtn');
+const checkBalanceBtn = document.getElementById('checkBalanceBtn');
+const withdrawMoneyBtn = document.getElementById('withdrawMoneyBtn');
+const topLeadersBtn = document.getElementById('topLeadersBtn');
+const inviteFriendsBtn = document.getElementById('inviteFriendsBtn');
+const adminMenuBtn = document.getElementById('adminMenuBtn');
+if (!adminMenuBtn) {
+    console.error('adminMenuBtn not found');
+}
 const gameArea = document.getElementById('gameArea');
 const bingoCard = document.getElementById('bingoCard');
 const gameStatus = document.getElementById('gameStatus');
@@ -40,30 +44,21 @@ const errorPage = document.getElementById('errorPage');
 const startBtn = document.getElementById('startBtn');
 const registerBtn = document.getElementById('registerBtn');
 
+
 function showPage(page) {
-    document.querySelectorAll('.content').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.content').forEach(p => {
+        p.style.display = 'none';
+        p.classList.remove('active');
+    });
     page.style.display = 'flex';
+    page.classList.add('active');
 }
 
 function showErrorPage(message) {
     document.getElementById('errorMessage').textContent = message;
-    showPage(errorPage);
+    showPage(document.getElementById('errorPage'));
 }
 
-// Set custom background with fallback
-function setCustomBackground() {
-    const customBg = new Image();
-    customBg.src = '/background.jpg'; // Custom background image
-    customBg.onload = () => {
-        document.body.style.backgroundImage = `url(${customBg.src})`;
-        document.body.style.backgroundSize = 'cover';
-        document.body.style.backgroundPosition = 'center';
-    };
-    customBg.onerror = () => {
-        console.warn('Custom background failed to load, using fallback');
-        document.body.style.backgroundImage = 'none';
-    };
-}
 
 // Registration handler
 async function registerUser() {
@@ -102,25 +97,31 @@ if (registerBtn) {
 }
 
 async function checkRegistration() {
-    showPage(welcomePage);
+    console.log('Checking registration for userId:', userId);
+    showPage(document.getElementById('welcomePage'));
     await new Promise(resolve => setTimeout(resolve, 2000));
-    loadingPage.style.display = 'flex';
+    document.getElementById('loadingPage').style.display = 'flex';
     try {
         const response = await fetch(`${API_URL}/user_data?user_id=${userId}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`HTTP ${response.status}: ${text}`);
+        }
         const data = await response.json();
+        console.log('User data:', data);
         if (data.error || !data.registered) {
-            showPage(registerPage);
+            showPage(document.getElementById('registerPage'));
         } else {
             showPage(document.getElementById('mainPage'));
             updatePlayerInfo();
             checkAdminStatus();
         }
     } catch (error) {
-        console.error('Error checking registration:', error);
-        showErrorPage('Failed to check registration. Please try again.');
+        console.error('Registration error:', error.message);
+        showErrorPage(`Failed to check registration: ${error.message}`);
     } finally {
-        loadingPage.style.display = 'none';
+        document.getElementById('loadingPage').style.display = 'none';
     }
 }
 
@@ -641,10 +642,20 @@ function manageWithdrawal(withdrawId, actionType) {
 
 // Night Mode Toggle
 nightModeSwitch.addEventListener('change', () => {
-    document.body.classList.toggle('night-mode', nightModeSwitch.checked);
-    document.getElementById('app').classList.toggle('night-mode', nightModeSwitch.checked);
-    setCustomBackground(); // Re-apply background in case mode changes
+    const isNightMode = nightModeSwitch.checked;
+    document.body.classList.toggle('night-mode', isNightMode);
+    document.getElementById('app').classList.toggle('night-mode', isNightMode);
+    localStorage.setItem('nightMode', isNightMode);
+    
 });
+
+// Initialize from storage
+const savedNightMode = localStorage.getItem('nightMode') === 'true';
+if (savedNightMode) {
+    nightModeSwitch.checked = true;
+    document.body.classList.add('night-mode');
+    document.getElementById('app').classList.add('night-mode');
+}
 
 // Interactive Developer Info
 let isHovering = false;
@@ -675,6 +686,6 @@ devInfo.addEventListener('click', () => {
 });
 
 // Initialize
-setCustomBackground();
+
 checkRegistration();
 updatePlayerInfo();

@@ -72,7 +72,7 @@ def test():
     return "Server is running"
 
 # --- Database Functions ---
-db_pool = psycopg2.pool.SimpleConnectionPool(1, 20, DATABASE_URL)
+db_pool = psycopg2.pool.ThreadedConnectionPool(1, 10, DATABASE_URL)
 
 def get_db_connection():
     try:
@@ -227,17 +227,21 @@ def check_referral_bonus(user_id):
 # --- Static File Serving ---
 @app.route('/')
 def serve_index():
-    logger.info(f"Serving index.html from {os.path.join(STATIC_FOLDER, 'index.html')}")
-    return send_from_directory(app.static_folder, 'index.html')
+    file_path = os.path.join(STATIC_FOLDER, 'index.html')
+    if not os.path.exists(file_path):
+        logger.error(f"index.html not found at {file_path}")
+        return jsonify({'error': 'File not found'}), 404
+    return send_from_directory(STATIC_FOLDER, 'index.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
-    logger.info(f"Serving {path} from {os.path.join(STATIC_FOLDER, path)}")
-    return send_from_directory(app.static_folder, path)
+    file_path = os.path.join(STATIC_FOLDER, path)
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {path}")
+        return jsonify({'error': 'File not found'}), 404
+    return send_from_directory(STATIC_FOLDER, path)
 
-@app.route('/favicon.ico')
-def serve_favicon():
-    return send_from_directory(app.static_folder, 'favicon.ico')
+
 
 # --- API Endpoints ---
 @app.route('/api/user_data', methods=['GET'])

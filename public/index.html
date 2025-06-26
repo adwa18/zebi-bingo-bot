@@ -14,11 +14,9 @@
             <img src="/logo.png" alt="Zebi Bingo Logo" class="logo">
             <h1>ዜቢ ቢንጎ</h1>
             <div id="playerInfo" style="position: absolute; top: 1rem; left: 1rem;">👤 Loading...</div>
-            <label class="night-mode-toggle">
-                <input type="checkbox" id="nightModeSwitch" aria-label="Toggle Night Mode"> 🌙 Night Mode
-            </label>
+            
         </header>
-        <div id="loadingPage" class="content" style="display: flex;">
+        <div id="loadingPage" class="content" style="display: none;">
             <h2>Loading...</h2>
             <div class="loader"></div>
         </div>
@@ -77,6 +75,7 @@
             <div class="game-actions">
                 <button id="callBtn" class="action-btn">📢 Call Number</button>
                 <button id="bingoBtn" class="action-btn">🎉 BINGO!</button>
+                <button id="returnBtn" class="secondary-btn">Return</button>
             </div>
         </div>
         <div id="content" class="content" style="display: none;"></div>
