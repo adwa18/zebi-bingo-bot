@@ -80,14 +80,18 @@ def get_db_connection():
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1")
-        conn.autocommit = False
+        if conn.get_transaction_status() != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
+            conn.rollback()
         return conn
-    except:
+    except Exception as e:
+        logger.error(f"Error in get_db_connection: {str(e)}")
         db_pool.putconn(conn, close=True)
         raise
 
 def release_db_connection(conn):
     try:
+        if conn.get_transaction_status() != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
+            conn.rollback()
         db_pool.putconn(conn)
     except Exception as e:
         logger.error(f"Error releasing connection: {str(e)}")
@@ -930,6 +934,7 @@ async def init_application():
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_admin_input), group=3)
         application.add_error_handler(error_handler)
         await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
+        logger.info(f"Webhook set to {WEB_APP_URL}/api/webhook")
         return application
 
     except Exception as e:
