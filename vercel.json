@@ -2,7 +2,7 @@
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "/bot.py"
+            "destination": "/api/bot.py"
         },
         {
             "source": "/(.*)",
@@ -10,7 +10,7 @@
         }
     ],
     "functions": {
-        "bot.py": {
+        "api/bot.py": {
             "maxDuration": 60
         }
     }
