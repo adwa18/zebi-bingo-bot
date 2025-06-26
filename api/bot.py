@@ -909,8 +909,7 @@ application = None  # Global variable
 async def main():
     global application
     init_db()
-    application = ApplicationBuilder().token(TOKEN).build()
-    application = Application.builder().token(TOKEN).build()
+    application = ApplicationBuilder().token(TOKEN).build() 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin))
     application.add_handler(CallbackQueryHandler(instructions, pattern='instructions'))
@@ -942,6 +941,9 @@ async def webhook():
         if not data:
             logger.error("Empty webhook data")
             return jsonify({'error': 'Empty webhook data'}), 400
+        if not application or not hasattr(application, 'bot'):
+            logger.error("Application or bot not initialized")
+            return jsonify({'error': 'Bot not initialized'}), 500
         update = Update.de_json(data, application.bot)
         if not update:
             logger.error("Invalid update data")
