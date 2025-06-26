@@ -904,6 +904,33 @@ def bot_user_data():
         logger.error(f"Error in bot_user_data: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+application = None  # Global variable
+
+async def main():
+    global application
+    init_db()
+    application = ApplicationBuilder().token(TOKEN).build()
+    application = Application.builder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", admin))
+    application.add_handler(CallbackQueryHandler(instructions, pattern='instructions'))
+    application.add_handler(CallbackQueryHandler(invite_friends, pattern='invite'))
+    application.add_handler(CallbackQueryHandler(contact_support, pattern='support'))
+    application.add_handler(CallbackQueryHandler(check_balance, pattern='check_balance'))
+    application.add_handler(CallbackQueryHandler(show_leaderboard, pattern='leaderboard'))
+    application.add_handler(CallbackQueryHandler(deposit, pattern='deposit'))
+    application.add_handler(CallbackQueryHandler(back_to_menu, pattern='back_to_menu'))
+    application.add_handler(CallbackQueryHandler(admin_handler, pattern='admin.*|verify_.*|withdraw_.*|withdraw_action_.*'))
+    application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^[a-zA-Z0-9]{6}$'), process_transaction_code))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, username_handler), group=1)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_deposit_amount), group=2)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_admin_input), group=3)
+    application.add_error_handler(error_handler)
+    await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
+    return application
+
+
 # Webhook
 @app.route('/api/webhook', methods=['GET', 'POST'])
 async def webhook():
@@ -924,6 +951,13 @@ async def webhook():
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}", exc_info=True)
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+if __name__ == '__main__':
+    
+    import asyncio
+    application = asyncio.run(main())
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
 
 
 # --- Telegram Bot Handlers ---
@@ -1630,36 +1664,3 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("❌ An error occurred. Please try again.")
     except Exception as e:
         logger.error(f"Error in error_handler: {str(e)}")
-
-async def main():
-    global application
-    init_db()
-    
-        
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("admin", admin))
-    application.add_handler(CallbackQueryHandler(instructions, pattern='instructions'))
-    application.add_handler(CallbackQueryHandler(invite_friends, pattern='invite'))
-    application.add_handler(CallbackQueryHandler(contact_support, pattern='support'))
-    application.add_handler(CallbackQueryHandler(check_balance, pattern='check_balance'))
-    application.add_handler(CallbackQueryHandler(show_leaderboard, pattern='leaderboard'))
-    application.add_handler(CallbackQueryHandler(deposit, pattern='deposit'))
-    application.add_handler(CallbackQueryHandler(back_to_menu, pattern='back_to_menu'))
-    application.add_handler(CallbackQueryHandler(admin_handler, pattern='admin.*|verify_.*|withdraw_.*|withdraw_action_.*'))
-    application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^[a-zA-Z0-9]{6}$'), process_transaction_code))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, username_handler), group=1)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_deposit_amount), group=2)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_admin_input), group=3)
-    application.add_error_handler(error_handler)
-    await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
-    return application
-
-        
-
-if __name__ == '__main__':
-    
-    import asyncio
-    application = asyncio.run(main())
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
