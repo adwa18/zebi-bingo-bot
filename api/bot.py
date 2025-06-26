@@ -72,15 +72,17 @@ logger = logging.getLogger(__name__)
 
 
 # --- Database Functions ---
-db_pool = psycopg2.pool.ThreadedConnectionPool(1, 10, DATABASE_URL)
+db_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, DATABASE_URL)
 
 def get_db_connection():
+    conn = db_pool.getconn()
     try:
-        conn = db_pool.getconn()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1")
         conn.autocommit = False
         return conn
-    except Exception as e:
-        logger.error(f"Database connection error: {str(e)}")
+    except:
+        db_pool.putconn(conn, close=True)
         raise
 
 def release_db_connection(conn):
@@ -910,6 +912,9 @@ async def webhook():
     try:
         data = request.get_json()
         logger.info(f"Received webhook data: {data}")
+        if not data:
+            logger.error("Empty webhook data")
+            return jsonify({'error': 'Empty webhook data'}), 400
         update = Update.de_json(data, application.bot)
         if not update:
             logger.error("Invalid update data")
