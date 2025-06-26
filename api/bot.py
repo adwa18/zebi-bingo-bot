@@ -903,15 +903,22 @@ def bot_user_data():
         return jsonify({'error': 'Internal server error'}), 500
 
 # Webhook
-@app.route('/api/webhook', methods=['POST'])
+@app.route('/api/webhook', methods=['GET', 'POST'])
 async def webhook():
+    if request.method == 'GET':
+        return jsonify({'status': 'Webhook is active', 'url': f'{WEB_APP_URL}/api/webhook'})
     try:
-        update = Update.de_json(request.get_json(), application.bot)
+        data = request.get_json()
+        logger.info(f"Received webhook data: {data}")
+        update = Update.de_json(data, application.bot)
+        if not update:
+            logger.error("Invalid update data")
+            return jsonify({'error': 'Invalid update data'}), 400
         await application.process_update(update)
         return jsonify({'status': 'ok'})
     except Exception as e:
-        logger.error(f"Webhook error: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        logger.error(f"Webhook error: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 
 # --- Telegram Bot Handlers ---
