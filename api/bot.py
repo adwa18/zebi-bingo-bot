@@ -33,10 +33,14 @@ STATIC_FOLDER = os.path.join(BASE_DIR, 'public')
 app = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='')
 TOKEN = os.environ.get("TOKEN")
 WEB_APP_URL = os.environ.get("WEB_APP_URL")
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(',') if x]
+try:
+    ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(',') if x and x.isdigit()]
+except ValueError:
+    logging.error("Invalid ADMIN_IDS format")
+    ADMIN_IDS = []
 DATABASE_URL = os.environ.get("DATABASE_URL")
 BACK_BUTTON_TEXT = "🔙 Back"
-API_URL = WEB_APP_URL + "/api"
+API_URL = f"{WEB_APP_URL}/api"
 
 # Validate environment variables
 if not all([TOKEN, WEB_APP_URL, DATABASE_URL]):
@@ -66,10 +70,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@app.route("/test", methods=["GET"])
-def test():
-    logger.info("Test endpoint accessed")
-    return "Server is running"
 
 # --- Database Functions ---
 db_pool = psycopg2.pool.ThreadedConnectionPool(1, 10, DATABASE_URL)
@@ -902,6 +902,18 @@ def bot_user_data():
         logger.error(f"Error in bot_user_data: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+# Webhook
+@app.route('/api/webhook', methods=['POST'])
+async def webhook():
+    try:
+        update = Update.de_json(request.get_json(), application.bot)
+        await application.process_update(update)
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        logger.error(f"Webhook error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 # --- Telegram Bot Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -1608,9 +1620,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in error_handler: {str(e)}")
 
 async def main():
+    global application
     init_db()
-    while True:
-        try:
+    
+        
             application = Application.builder().token(TOKEN).build()
             application.add_handler(CommandHandler("start", start))
             application.add_handler(CommandHandler("admin", admin))
@@ -1628,21 +1641,13 @@ async def main():
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_deposit_amount), group=2)
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_admin_input), group=3)
             application.add_error_handler(error_handler)
-            await application.run_polling()
+            await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
+            return application
 
-        except Exception as e:
-            logger.error(f"Bot polling crashed: {str(e)}", exc_info=True)
-            # Wait before restarting to avoid rapid restart loops
-            time.sleep(10)
-            logger.info("Restarting Telegram bot polling")
-            # Continue the loop to rebuild and restart the application
-            continue
+        
 
 if __name__ == '__main__':
-    from threading import Thread
-    import asyncio
-    def run_bot():
-        asyncio.run(main())
-    Thread(target=run_bot).start()
     
+    import asyncio
+    application = asyncio.run(main())
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
