@@ -3,7 +3,6 @@ import logging
 import psycopg2
 from psycopg2 import pool
 import random
-import asyncio
 import string
 import os
 import time
@@ -234,58 +233,50 @@ def check_referral_bonus(user_id):
 
 # --- Telegram Bot Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Start handler triggered for user {update.effective_user.id}")
-    try:
-        user = update.effective_user
-        if context.args and context.args[0].startswith('ref_'):
-            try:
-                referrer_id = int(context.args[0][4:])
-                conn = get_db_connection()
-                try:
-                    with conn.cursor() as cursor:
-                        cursor.execute(
-                            "INSERT INTO referrals (referrer_id, referee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                            (referrer_id, user.id)
-                        )
-                        conn.commit()
-                finally:
-                    release_db_connection(conn)
-            except ValueError:
-                logger.warning(f"Invalid referral code: {context.args[0]}")
-    
-        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.png')
-        message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!"
+    user = update.effective_user
+    if context.args and context.args[0].startswith('ref_'):
         try:
-            if os.path.exists(image_path):
-                await update.message.reply_photo(
-                    photo=InputFile(image_path),
-                    caption="🎉 እንኳን ወደ ቤታችን በሰላም መጡ! 🎉\n💰 በሽልማት ይንበሽበሹ\n🎱 ከጓደኞቻቹ ጋር ለመጫወት አሁኑኑ ይቀላቀሉን!",
-                    reply_markup=main_menu_keyboard(user.id)
-                )
-            else:
-                await update.message.reply_text(
-                    message,
-                    reply_markup=main_menu_keyboard(user.id)
+            referrer_id = int(context.args[0][4:])
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "INSERT INTO referrals (referrer_id, referee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                        (referrer_id, user.id)
+                    )
+                    conn.commit()
+            finally:
+                release_db_connection(conn)
+        except ValueError:
+            logger.warning(f"Invalid referral code: {context.args[0]}")
+    try:
+        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.png')
+        if os.path.exists(image_path):
+            await update.message.reply_photo(
+                photo=InputFile(image_path),
+                caption="🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!",
+                reply_markup=main_menu_keyboard(user.id)
             )
-        except RuntimeError as e:
-            logger.error(f"Event loop error in start handler: {str(e)}", exc_info=True)
-            # Fallback to sending a new message
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=message,
-            reply_markup=main_menu_keyboard(user.id)
+        else:
+            await update.message.reply_text(
+                "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!",
+                reply_markup=main_menu_keyboard(user.id)
             )
     except Exception as e:
-        logger.error(f"Error in start handler: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Error occurred. Please try again.")
-
+        logger.error(f"Error in start handler: {str(e)}")
+        await update.message.reply_text(
+            "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!",
+            reply_markup=main_menu_keyboard(user.id)
+        )
 
 def main_menu_keyboard(user_id):
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
+    
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
-            registered = True
+            registered = cursor.fetchone() is not None
             logger.info(f"User {user_id} registered: {registered}")
         keyboard = [
             [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={user_id}"))] if registered else [],
@@ -302,16 +293,35 @@ def main_menu_keyboard(user_id):
         return InlineKeyboardMarkup([row for row in keyboard if row])
     except Exception as e:
         logger.error(f"Error in main_menu_keyboard for user {user_id}: {str(e)}", exc_info=True)
-        raise
-
-
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📝 Register", callback_data='register')],
+            [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
+            [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
+        ])     
     finally:
-        release_db_connection(conn)
+        if conn:
+            release_db_connection(conn)
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.callback_query.answer()
-        await update.callback_query.edit_message_text(
+        query = update.callback_query
+        await query.answer()
+        
+        # Check if already registered
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (query.from_user.id,))
+                if cursor.fetchone():
+                    await query.edit_message_text(
+                        "You are already registered!",
+                        reply_markup=main_menu_keyboard(query.from_user.id)
+                    )
+                    return
+        finally:
+            release_db_connection(conn)
+            
+        await query.edit_message_text(
             "ለመቀጠል ስልክ ቁጥሮን ያጋሩ!",
             reply_markup=ReplyKeyboardMarkup([
                 [KeyboardButton("📲 Share Contact", request_contact=True)]
@@ -319,17 +329,18 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.error(f"Error in register handler: {str(e)}")
-        await update.callback_query.edit_message_text("❌ Error occurred. Please try again.")
+        try:
+            await query.edit_message_text("❌ Error occurred. Please try /start again.")
+        except:
+            pass
 
 async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Contact handler triggered for user {update.effective_user.id}")
     try:
         contact = update.message.contact
         user = update.effective_user
         context.user_data['phone'] = contact.phone_number
         context.user_data['name'] = contact.first_name or user.username
         context.user_data['awaiting_username'] = True
-        logger.info(f"Stored phone {context.user_data['phone']} for user {user.id}")
         await update.message.reply_text(
             "Please enter your desired username:",
             reply_markup=ReplyKeyboardRemove()
@@ -339,15 +350,12 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Error during registration.")
 
 async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Username handler triggered for user {update.effective_user.id}")
     try:
         if 'awaiting_username' not in context.user_data:
-            logger.warning("Username handler called without awaiting_username")
             return
         username = update.message.text.strip()
-        logger.info(f"Received username: {username}")
-        if not (3 <= len(username) <= 10):
-            await update.message.reply_text("❌ Username must be 3-10 characters. Try again:")
+        if not (3 <= len(username) <= 20):
+            await update.message.reply_text("❌ Username must be 3-20 characters. Try again:")
             return
         conn = get_db_connection()
         try:
@@ -385,7 +393,6 @@ async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('awaiting_username', None)
 
 async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Instructions handler triggered for user {update.effective_user.id}")
     try:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(
@@ -467,7 +474,6 @@ Current referrals: {referral_count}
         await query.edit_message_text("❌ Error generating invite link.")
 
 async def contact_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Contact support handler triggered for user {update.effective_user.id}")
     try:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(
@@ -964,31 +970,25 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Application Initialization ---
-loop = None
 application = None  # Global variable
 
 async def init_application():
-    global application,loop
+    global application
     try:
-        # Ensure a single event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        logger.info("Initializing database")
         init_db()
         application = ApplicationBuilder().token(TOKEN).build()
         await application.initialize()
         logger.info("Application initialized successfully") 
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("admin", admin))
-        application.add_handler(CallbackQueryHandler(instructions, pattern='instructions'))
-        application.add_handler(CallbackQueryHandler(invite_friends, pattern='invite'))
-        application.add_handler(CallbackQueryHandler(contact_support, pattern='support'))
-        application.add_handler(CallbackQueryHandler(check_balance, pattern='check_balance'))
-        application.add_handler(CallbackQueryHandler(show_leaderboard, pattern='leaderboard'))
-        application.add_handler(CallbackQueryHandler(deposit, pattern='deposit'))
-        application.add_handler(CallbackQueryHandler(back_to_menu, pattern='back_to_menu'))
+        application.add_handler(CallbackQueryHandler(register, pattern='^register$'))
+        application.add_handler(CallbackQueryHandler(instructions, pattern='instructions$'))
+        application.add_handler(CallbackQueryHandler(invite_friends, pattern='invite$'))
+        application.add_handler(CallbackQueryHandler(contact_support, pattern='support$'))
+        application.add_handler(CallbackQueryHandler(check_balance, pattern='check_balance$'))
+        application.add_handler(CallbackQueryHandler(show_leaderboard, pattern='leaderboard$'))
+        application.add_handler(CallbackQueryHandler(deposit, pattern='deposit$'))
+        application.add_handler(CallbackQueryHandler(back_to_menu, pattern='back_to_menu$'))
         application.add_handler(CallbackQueryHandler(admin_handler, pattern='admin.*|verify_.*|withdraw_.*|withdraw_action_.*'))
         application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^[a-zA-Z0-9]{6}$'), process_transaction_code))
@@ -998,7 +998,7 @@ async def init_application():
         application.add_error_handler(error_handler)
         await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
         logger.info(f"Webhook set to {WEB_APP_URL}/api/webhook")
-        
+        return application
 
     except Exception as e:
         logger.error(f"Failed to initialize application: {str(e)}", exc_info=True)
@@ -1007,11 +1007,8 @@ async def init_application():
 
 # Initialize application at module level
 try:
-    loop = asyncio.get_event_loop()
-    if loop.is_closed():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    loop.run_until_complete(init_application())
+    import asyncio
+    asyncio.get_event_loop().run_until_complete(init_application())
 except Exception as e:
     logger.error(f"Module-level initialization failed: {str(e)}", exc_info=True)
     raise
@@ -1020,7 +1017,6 @@ except Exception as e:
 # Webhook
 @app.route('/api/webhook', methods=['GET', 'POST'])
 async def webhook():
-    global application, loop
     if request.method == 'GET':
         return jsonify({'status': 'Webhook is active', 'url': f'{WEB_APP_URL}/api/webhook'})
     try:
@@ -1030,7 +1026,7 @@ async def webhook():
             logger.error("Empty webhook data")
             return jsonify({'error': 'Empty webhook data'}), 400
         if not application or not hasattr(application, 'bot'):
-            logger.error("Reinitializing application due to missing instance")
+            logger.error("Application or bot not initialized")
             return jsonify({'error': 'Bot not initialized'}), 500
         required_fields = ['update_id']
         if not all(field in data for field in required_fields):
@@ -1052,13 +1048,16 @@ async def webhook():
             if not update:
                 logger.error("Failed to parse update data")
                 return jsonify({'error': 'Invalid update data'}), 400
-        
-            await application.process_update(update)
-            return jsonify({'status': 'ok'})
         except Exception as e:
             logger.error(f"Error parsing update: {str(e)}", exc_info=True)
             return jsonify({'error': f'Internal server error: {str(e)}'}), 500
-
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            await application.process_update(update)
+        finally:
+            loop.close()
+        return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}", exc_info=True)
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
