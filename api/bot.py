@@ -996,11 +996,20 @@ async def webhook():
         if not application or not hasattr(application, 'bot'):
             logger.error("Application or bot not initialized")
             return jsonify({'error': 'Bot not initialized'}), 500
-        update = Update.de_json(data, application.bot)
-        if not update:
-            logger.error("Invalid update data")
-            return jsonify({'error': 'Invalid update data'}), 400
-        # Run process_update in a new event loop to avoid "Event loop is closed"
+        try:
+            # Validate date field
+            if 'message' in data and 'date' in data['message']:
+                date_value = data['message']['date']
+                if not isinstance(date_value, int) or date_value < 0:
+                    logger.error(f"Invalid date field: {date_value}")
+                    return jsonify({'error': 'Invalid date field'}), 400
+            update = Update.de_json(data, application.bot)
+            if not update:
+                logger.error("Invalid update data")
+                return jsonify({'error': 'Invalid update data'}), 400
+        except Exception as e:
+            logger.error(f"Error parsing update: {str(e)}", exc_info=True)
+            return jsonify({'error': f'Internal server error: {str(e)}'}), 500
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
