@@ -996,16 +996,25 @@ async def webhook():
         if not application or not hasattr(application, 'bot'):
             logger.error("Application or bot not initialized")
             return jsonify({'error': 'Bot not initialized'}), 500
+        required_fields = ['update_id']
+        if not all(field in data for field in required_fields):
+            logger.error(f"Missing required fields in webhook data: {required_fields}")
+            return jsonify({'error': f'Missing required fields: {required_fields}'}), 400
+        if 'message' in data:
+            message_required = ['message_id', 'chat', 'date']
+            if not all(field in data['message'] for field in message_required):
+                logger.error(f"Missing required message fields: {message_required}")
+                return jsonify({'error': f'Missing required message fields: {message_required}'}), 400
+            if not isinstance(data['message']['date'], int) or data['message']['date'] < 0:
+                logger.error(f"Invalid date field: {data['message']['date']}")
+                return jsonify({'error': 'Invalid date field'}), 400
+            if 'chat' in data['message'] and 'id' not in data['message']['chat']:
+                logger.error("Missing chat.id in message")
+                return jsonify({'error': 'Missing chat.id in message'}), 400
         try:
-            # Validate date field
-            if 'message' in data and 'date' in data['message']:
-                date_value = data['message']['date']
-                if not isinstance(date_value, int) or date_value < 0:
-                    logger.error(f"Invalid date field: {date_value}")
-                    return jsonify({'error': 'Invalid date field'}), 400
             update = Update.de_json(data, application.bot)
             if not update:
-                logger.error("Invalid update data")
+                logger.error("Failed to parse update data")
                 return jsonify({'error': 'Invalid update data'}), 400
         except Exception as e:
             logger.error(f"Error parsing update: {str(e)}", exc_info=True)
