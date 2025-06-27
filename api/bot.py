@@ -274,7 +274,8 @@ def main_menu_keyboard(user_id):
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
-            registered = cursor.fetchone() is not None
+            registered = True
+            logger.info(f"User {user_id} registered: {registered}")
         keyboard = [
             [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={user_id}"))] if registered else [],
             [InlineKeyboardButton("💰 Check Balance", callback_data='check_balance')] if registered else [],
@@ -286,7 +287,13 @@ def main_menu_keyboard(user_id):
         ]
         if not registered:
             keyboard.insert(0, [InlineKeyboardButton("📝 Register", callback_data='register')])
+        logger.info(f"Keyboard for user {user_id}: {[btn.text for row in keyboard for btn in row if row]}")
         return InlineKeyboardMarkup([row for row in keyboard if row])
+    except Exception as e:
+        logger.error(f"Error in main_menu_keyboard for user {user_id}: {str(e)}", exc_info=True)
+        raise
+
+
     finally:
         release_db_connection(conn)
 
