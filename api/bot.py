@@ -1000,7 +1000,13 @@ async def webhook():
         if not update:
             logger.error("Invalid update data")
             return jsonify({'error': 'Invalid update data'}), 400
-        await application.process_update(update)
+        # Run process_update in a new event loop to avoid "Event loop is closed"
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            await application.process_update(update)
+        finally:
+            loop.close()
         return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}", exc_info=True)
