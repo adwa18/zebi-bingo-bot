@@ -946,6 +946,7 @@ async def init_application():
     try:
         init_db()
         application = ApplicationBuilder().token(TOKEN).build()
+        await application.initialize()
         logger.info("Application initialized successfully") 
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("admin", admin))
