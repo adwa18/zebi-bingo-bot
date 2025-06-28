@@ -20,12 +20,8 @@
       "src": "/(.*)",
       "dest": "/public/$1"
     }
+ 
   ],
-  "functions": {
-    "api/bot.py": {
-      "maxDuration": 60
-    }
-  },
   "env": {
     "PYTHON_VERSION": "3.12",
     "TOKEN": "8184706551:AAH079DGSkLn0efQPqm2yYm5l1Aqg1uiGOk",

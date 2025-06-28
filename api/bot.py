@@ -329,36 +329,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Register handler triggered for user {update.effective_user.id}")
     try:
-        query = update.callback_query
-        await query.answer()
-        
-        # Check if already registered
-        conn = get_db_connection()
+        await update.callback_query.answer()
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (query.from_user.id,))
-                if cursor.fetchone():
-                    await query.edit_message_text(
-                        "You are already registered!",
-                        reply_markup=main_menu_keyboard(query.from_user.id)
-                    )
-                    return
-        finally:
-            release_db_connection(conn)
-            
-        await query.edit_message_text(
-            "ለመቀጠል ስልክ ቁጥሮን ያጋሩ!",
-            reply_markup=ReplyKeyboardMarkup([
-                [KeyboardButton("📲 Share Contact", request_contact=True)]
-            ], resize_keyboard=True, one_time_keyboard=True)
-        )
+            await update.callback_query.edit_message_text(
+                text="ለመቀጠል ስልክ ቁጥሮን ያጋሩ!",
+                reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton("📲 Share Contact", request_contact=True)]
+                ], resize_keyboard=True, one_time_keyboard=True)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message: {str(e)}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="ለመቀጠል ስልክ ቁጥሮን ያጋሩ!",
+                reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton("📲 Share Contact", request_contact=True)]
+                ], resize_keyboard=True, one_time_keyboard=True)
+            )
     except Exception as e:
-        logger.error(f"Error in register handler: {str(e)}")
+        logger.error(f"Error in register handler: {str(e)}", exc_info=True)
         try:
-            await query.edit_message_text("❌ Error occurred. Please try /start again.")
-        except:
-            pass
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error initiating registration."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
