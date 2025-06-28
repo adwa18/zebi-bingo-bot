@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify, send_from_directory
 import logging
+from logging.handlers import RotatingFileHandler
 import psycopg2
 from psycopg2 import pool
+import asyncio
 import random
 import string
 import os
@@ -47,6 +49,27 @@ API_URL = f"{WEB_APP_URL}/api"
 if not all([TOKEN, WEB_APP_URL, DATABASE_URL]):
     raise ValueError("Missing required environment variables: TOKEN, WEB_APP_URL, or DATABASE_URL")
 
+
+
+# Initialize logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        RotatingFileHandler('bot.log', maxBytes=10000000, backupCount=5),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('api.bot')
+
+
+# Database connection pool
+db_pool = None
+
+# Global event loop and application
+loop = None
+application = None
+
 # Constants
 INSUFFICIENT_WALLET = "Insufficient wallet"
 BET_OPTIONS = [10, 50, 100, 200]
@@ -64,43 +87,28 @@ SELECT_CARD_NUMBERS_QUERY = "SELECT card_numbers FROM player_cards WHERE game_id
 SELECT_ROLE_QUERY = "SELECT role FROM users WHERE user_id = %s"
 UPDATE_ROLE_QUERY = "UPDATE users SET role = 'admin' WHERE user_id = %s AND role != 'admin'"
 
-# Initialize logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-
-# --- Database Functions ---
-db_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, DATABASE_URL)
-
 def get_db_connection():
-    conn = db_pool.getconn()
     try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT 1")
-        if conn.get_transaction_status() != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
-            conn.rollback()
-        return conn
+        return db_pool.getconn()
     except Exception as e:
-        logger.error(f"Error in get_db_connection: {str(e)}")
-        db_pool.putconn(conn, close=True)
+        logger.error(f"Error getting DB connection: {str(e)}", exc_info=True)
         raise
 
 def release_db_connection(conn):
     try:
-        if conn.get_transaction_status() != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
-            conn.rollback()
         db_pool.putconn(conn)
     except Exception as e:
-        logger.error(f"Error releasing connection: {str(e)}")
+        logger.error(f"Error releasing DB connection: {str(e)}", exc_info=True)
 
 def init_db():
-    logger.info("Initializing database")
-    conn = get_db_connection()
+    global db_pool
     try:
-        with conn.cursor() as cursor:
+        db_pool = psycopg2.pool.SimpleConnectionPool(1, 10, DATABASE_URL)
+        if not db_pool:
+            raise Exception("Failed to create database connection pool")
+        logger.info("Database pool initialized")
+        with get_db_connection() as conn:
+            with conn.cursor() as cursor:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id BIGINT PRIMARY KEY,
@@ -183,14 +191,15 @@ def init_db():
             conn.commit()
             logger.info("Database initialized")
     except Exception as e:
-        logger.error(f"Database initialization error: {str(e)}")
-        conn.rollback()
+        logger.error(f"Error initializing database: {str(e)}", exc_info=True)
         raise
     finally:
-        release_db_connection(conn)
+        if 'conn' in locals():
+            release_db_connection(conn)
 
 def generate_referral_code(user_id):
-    return f"BINGO{user_id}{random.randint(1000, 9999)}"
+    import hashlib
+    return hashlib.md5(str(user_id).encode()).hexdigest()[:8]
 
 def generate_tx_id(user_id):
     return f"TX{user_id}{''.join(random.choices(string.ascii_uppercase + string.digits, k=6))}"
@@ -232,43 +241,6 @@ def check_referral_bonus(user_id):
         release_db_connection(conn)
 
 # --- Telegram Bot Handlers ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if context.args and context.args[0].startswith('ref_'):
-        try:
-            referrer_id = int(context.args[0][4:])
-            conn = get_db_connection()
-            try:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "INSERT INTO referrals (referrer_id, referee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                        (referrer_id, user.id)
-                    )
-                    conn.commit()
-            finally:
-                release_db_connection(conn)
-        except ValueError:
-            logger.warning(f"Invalid referral code: {context.args[0]}")
-    try:
-        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.png')
-        if os.path.exists(image_path):
-            await update.message.reply_photo(
-                photo=InputFile(image_path),
-                caption="🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!",
-                reply_markup=main_menu_keyboard(user.id)
-            )
-        else:
-            await update.message.reply_text(
-                "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!",
-                reply_markup=main_menu_keyboard(user.id)
-            )
-    except Exception as e:
-        logger.error(f"Error in start handler: {str(e)}")
-        await update.message.reply_text(
-            "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!",
-            reply_markup=main_menu_keyboard(user.id)
-        )
-
 def main_menu_keyboard(user_id):
     conn = None
     try:
@@ -301,6 +273,60 @@ def main_menu_keyboard(user_id):
     finally:
         if conn:
             release_db_connection(conn)
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Start handler triggered for user {update.effective_user.id}")
+    try:
+        user = update.effective_user
+        if context.args and context.args[0].startswith('ref_'):
+            try:
+                referrer_id = int(context.args[0][4:])
+                conn = get_db_connection()
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            "INSERT INTO referrals (referrer_id, referee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (referrer_id, user.id)
+                        )
+                        conn.commit()
+                finally:
+                    release_db_connection(conn)
+            except ValueError:
+                logger.warning(f"Invalid referral code: {context.args[0]}")
+        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.jpg')
+        message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!"
+        try:
+            if os.path.exists(image_path):
+                await update.message.reply_photo(
+                    photo=InputFile(image_path),
+                    caption=message,
+                    reply_markup=main_menu_keyboard(user.id)
+                )
+            else:
+                await update.message.reply_text(
+                    text=message,
+                    reply_markup=main_menu_keyboard(user.id)
+                )
+        except Exception as e:
+            logger.error(f"Error sending message in start handler: {str(e)}", exc_info=True)
+            # Fallback to sending via bot directly
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=message,
+                reply_markup=main_menu_keyboard(user.id)
+            )
+    except Exception as e:
+        logger.error(f"Error in start handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error occurred. Please try again."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+
+
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -969,16 +995,21 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-# --- Application Initialization ---
-application = None  # Global variable
 
 async def init_application():
-    global application
+    global application, loop, db_pool
     try:
+        # Ensure a single event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        logger.info("Initializing database")
         init_db()
         application = ApplicationBuilder().token(TOKEN).build()
         await application.initialize()
-        logger.info("Application initialized successfully") 
+        logger.info("Application initialized successfully")
+        # Register handlers 
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("admin", admin))
         application.add_handler(CallbackQueryHandler(register, pattern='^register$'))
@@ -998,25 +1029,19 @@ async def init_application():
         application.add_error_handler(error_handler)
         await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
         logger.info(f"Webhook set to {WEB_APP_URL}/api/webhook")
-        return application
+        
 
     except Exception as e:
         logger.error(f"Failed to initialize application: {str(e)}", exc_info=True)
         raise
 
 
-# Initialize application at module level
-try:
-    import asyncio
-    asyncio.get_event_loop().run_until_complete(init_application())
-except Exception as e:
-    logger.error(f"Module-level initialization failed: {str(e)}", exc_info=True)
-    raise
 
 
 # Webhook
 @app.route('/api/webhook', methods=['GET', 'POST'])
 async def webhook():
+    global application, loop
     if request.method == 'GET':
         return jsonify({'status': 'Webhook is active', 'url': f'{WEB_APP_URL}/api/webhook'})
     try:
@@ -1026,38 +1051,29 @@ async def webhook():
             logger.error("Empty webhook data")
             return jsonify({'error': 'Empty webhook data'}), 400
         if not application or not hasattr(application, 'bot'):
-            logger.error("Application or bot not initialized")
-            return jsonify({'error': 'Bot not initialized'}), 500
+            logger.info("Reinitializing application due to missing instance")
+            await init_application()
         required_fields = ['update_id']
         if not all(field in data for field in required_fields):
             logger.error(f"Missing required fields in webhook data: {required_fields}")
             return jsonify({'error': f'Missing required fields: {required_fields}'}), 400
-        if 'message' in data:
-            message_required = ['message_id', 'chat', 'date']
-            if not all(field in data['message'] for field in message_required):
-                logger.error(f"Missing required message fields: {message_required}")
-                return jsonify({'error': f'Missing required message fields: {message_required}'}), 400
-            if not isinstance(data['message']['date'], int) or data['message']['date'] < 0:
-                logger.error(f"Invalid date field: {data['message']['date']}")
-                return jsonify({'error': 'Invalid date field'}), 400
-            if 'chat' in data['message'] and 'id' not in data['message']['chat']:
-                logger.error("Missing chat.id in message")
-                return jsonify({'error': 'Missing chat.id in message'}), 400
         try:
             update = Update.de_json(data, application.bot)
             if not update:
                 logger.error("Failed to parse update data")
                 return jsonify({'error': 'Invalid update data'}), 400
+            await application.process_update(update)
+            return jsonify({'status': 'ok'})
+        except RuntimeError as e:
+            logger.error(f"Event loop error in webhook: {str(e)}", exc_info=True)
+            # Reinitialize application to recover
+            await init_application()
+            update = Update.de_json(data, application.bot)
+            await application.process_update(update)
+            return jsonify({'status': 'ok'})
         except Exception as e:
             logger.error(f"Error parsing update: {str(e)}", exc_info=True)
             return jsonify({'error': f'Internal server error: {str(e)}'}), 500
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            await application.process_update(update)
-        finally:
-            loop.close()
-        return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}", exc_info=True)
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
@@ -1742,4 +1758,14 @@ def serve_static(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    import uvicorn
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        loop.run_until_complete(init_application())
+        uvicorn.run("bot:app", host="0.0.0.0", port=int(os.environ.get('PORT', 5000)), workers=1)
+    except Exception as e:
+        logger.error(f"Failed to start application: {str(e)}", exc_info=True)
+        raise

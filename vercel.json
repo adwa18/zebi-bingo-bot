@@ -1,17 +1,36 @@
 {
-    "rewrites": [
-        {
-            "source": "/api/(.*)",
-            "destination": "/api/bot.py"
-        },
-        {
-            "source": "/(.*)",
-            "destination": "/public/$1"
-        }
-    ],
-    "functions": {
-        "api/bot.py": {
-            "maxDuration": 60
-        }
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/bot.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "50mb" }
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/bot.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ],
+  "functions": {
+    "api/bot.py": {
+      "maxDuration": 60
+    }
+  },
+  "env": {
+    "PYTHON_VERSION": "3.12",
+    "TOKEN": "8184706551:AAH079DGSkLn0efQPqm2yYm5l1Aqg1uiGOk",
+    "WEB_APP_URL": "https://zebi-bingo-bot.vercel.app",
+    "DATABASE_URL": "postgresql://postgres.tfrpctwynrmhlddbwfix:tewodrosephrem@aws-0-eu-west-3.pooler.supabase.com:6543/postgres",
+    "ADMIN_IDS": "5380773431"
+  }
 }
