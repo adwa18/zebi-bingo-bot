@@ -107,95 +107,95 @@ def init_db():
         if not db_pool:
             raise Exception("Failed to create database connection pool")
         logger.info("Database pool initialized")
-        with get_db_connection() as conn:
+        conn = get_db_connection()
+        try:
             with conn.cursor() as cursor:
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id BIGINT PRIMARY KEY,
-                    phone TEXT,
-                    username TEXT UNIQUE,
-                    name TEXT,
-                    wallet INTEGER DEFAULT %s,
-                    score INTEGER DEFAULT 0,
-                    referral_code TEXT UNIQUE,
-                    referred_by TEXT,
-                    registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    role TEXT DEFAULT 'user',
-                    invalid_bingo_count INTEGER DEFAULT 0
-                );
-                CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
-                CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);
-            ''', (INITIAL_WALLET,))
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS transactions (
-                    tx_id TEXT PRIMARY KEY,
-                    user_id BIGINT,
-                    amount INTEGER,
-                    method TEXT,
-                    status TEXT DEFAULT 'pending',
-                    verification_code TEXT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS referrals (
-                    referral_id SERIAL PRIMARY KEY,
-                    referrer_id BIGINT,
-                    referee_id BIGINT,
-                    bonus_credited BOOLEAN DEFAULT FALSE,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (referrer_id) REFERENCES users(user_id),
-                    FOREIGN KEY (referee_id) REFERENCES users(user_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS games (
-                    game_id TEXT PRIMARY KEY,
-                    players TEXT DEFAULT '',
-                    numbers_called TEXT DEFAULT '',
-                    status TEXT DEFAULT 'waiting',
-                    start_time TIMESTAMP,
-                    end_time TIMESTAMP,
-                    winner_id BIGINT,
-                    prize_amount INTEGER DEFAULT 0,
-                    bet_amount INTEGER DEFAULT 0,
-                    countdown_start TIMESTAMP
-                );
-                CREATE INDEX IF NOT EXISTS idx_games_game_id ON games(game_id);
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS player_cards (
-                    card_id SERIAL PRIMARY KEY,
-                    game_id TEXT,
-                    user_id BIGINT,
-                    card_numbers TEXT,
-                    card_accepted BOOLEAN DEFAULT FALSE,
-                    FOREIGN KEY (game_id) REFERENCES games(game_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_player_cards_game_user ON player_cards(game_id, user_id);
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS withdrawals (
-                    withdraw_id TEXT PRIMARY KEY,
-                    user_id BIGINT,
-                    amount INTEGER,
-                    status TEXT DEFAULT 'pending',
-                    request_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    method TEXT,
-                    admin_note TEXT
-                );
-                CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id);
-            ''')
-            conn.commit()
-            logger.info("Database initialized")
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id BIGINT PRIMARY KEY,
+                        phone TEXT,
+                        username TEXT UNIQUE,
+                        name TEXT,
+                        wallet INTEGER DEFAULT %s,
+                        score INTEGER DEFAULT 0,
+                        referral_code TEXT UNIQUE,
+                        referred_by TEXT,
+                        registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        role TEXT DEFAULT 'user',
+                        invalid_bingo_count INTEGER DEFAULT 0
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
+                    CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);
+                ''', (INITIAL_WALLET,))
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS transactions (
+                        tx_id TEXT PRIMARY KEY,
+                        user_id BIGINT,
+                        amount INTEGER,
+                        method TEXT,
+                        status TEXT DEFAULT 'pending',
+                        verification_code TEXT,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS referrals (
+                        referral_id SERIAL PRIMARY KEY,
+                        referrer_id BIGINT,
+                        referee_id BIGINT,
+                        bonus_credited BOOLEAN DEFAULT FALSE,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (referrer_id) REFERENCES users(user_id),
+                        FOREIGN KEY (referee_id) REFERENCES users(user_id)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS games (
+                        game_id TEXT PRIMARY KEY,
+                        players TEXT DEFAULT '',
+                        numbers_called TEXT DEFAULT '',
+                        status TEXT DEFAULT 'waiting',
+                        start_time TIMESTAMP,
+                        end_time TIMESTAMP,
+                        winner_id BIGINT,
+                        prize_amount INTEGER DEFAULT 0,
+                        bet_amount INTEGER DEFAULT 0,
+                        countdown_start TIMESTAMP
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_games_game_id ON games(game_id);
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS player_cards (
+                        card_id SERIAL PRIMARY KEY,
+                        game_id TEXT,
+                        user_id BIGINT,
+                        card_numbers TEXT,
+                        card_accepted BOOLEAN DEFAULT FALSE,
+                        FOREIGN KEY (game_id) REFERENCES games(game_id)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_player_cards_game_user ON player_cards(game_id, user_id);
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS withdrawals (
+                        withdraw_id TEXT PRIMARY KEY,
+                        user_id BIGINT,
+                        amount INTEGER,
+                        status TEXT DEFAULT 'pending',
+                        request_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        method TEXT,
+                        admin_note TEXT
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id);
+                ''')
+                conn.commit()
+                logger.info("Database initialized")
+        finally:
+                release_db_connection(conn)
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}", exc_info=True)
         raise
-    finally:
-        if 'conn' in locals():
-            release_db_connection(conn)
 
 def generate_referral_code(user_id):
     import hashlib
