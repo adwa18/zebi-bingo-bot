@@ -55,10 +55,7 @@ if not all([TOKEN, WEB_APP_URL, DATABASE_URL]):
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        RotatingFileHandler('bot.log', maxBytes=10000000, backupCount=5),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]  # Use StreamHandler for Vercel
 )
 logger = logging.getLogger('api.bot')
 
