@@ -416,17 +416,15 @@ async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         finally:
             release_db_connection(conn)
+            context.user_data.pop('awaiting_username', None)
     except Exception as e:
         logger.error(f"Error in username_handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Error setting username."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
-    finally:
-        context.user_data.pop('awaiting_username', None)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="❌ Error setting username."
+        )
+        
+        
 
 async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Instructions handler triggered for user {update.effective_user.id}")
