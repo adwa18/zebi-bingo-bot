@@ -21,11 +21,11 @@ if (!userId) {
 // DOM Elements
 const welcomePage = document.getElementById('welcomePage');
 const registerPage = document.getElementById('registerPage');
-const returnToBotBtn = document.getElementById('returnToBotBtn');
-const checkBalanceBtn = document.getElementById('checkBalanceBtn');
-const withdrawMoneyBtn = document.getElementById('withdrawMoneyBtn');
-const topLeadersBtn = document.getElementById('topLeadersBtn');
-const inviteFriendsBtn = document.getElementById('inviteFriendsBtn');
+const returnToBotBtn = document.getElementById('returnBtn');
+const checkBalanceBtn = document.getElementById('checkBalance');
+const withdrawMoneyBtn = document.getElementById('withdrawMoney');
+const topLeadersBtn = document.getElementById('topLeaders');
+const inviteFriendsBtn = document.getElementById('inviteFriends');
 const adminMenuBtn = document.getElementById('adminMenuBtn');
 if (!adminMenuBtn) {
     console.error('adminMenuBtn not found');
@@ -55,8 +55,14 @@ function showPage(page) {
 }
 
 function showErrorPage(message) {
-    document.getElementById('errorMessage').textContent = message;
-    showPage(document.getElementById('errorPage'));
+    const errorElement = document.getElementById('errorMessage');
+    if (errorElement && errorPage) {
+        errorElement.textContent = message;
+        showPage(errorPage);
+    } else {
+        console.error('errorPage or errorMessage not found');
+        document.body.innerHTML = `<h1>Error: ${message}</h1><button onclick="window.location.reload()">Retry</button>`;
+    }
 }
 
 
@@ -98,33 +104,64 @@ if (registerBtn) {
 
 async function checkRegistration() {
     console.log('Checking registration for userId:', userId);
-    showPage(document.getElementById('welcomePage'));
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    if (!welcomePage) {
+        console.error('welcomePage is missing in DOM');
+        document.body.innerHTML = '<h1>Error: Welcome page not found</h1>';
+        return;
+    }
+    showPage(welcomePage);
+    await new Promise(resolve => setTimeout(resolve, 500)); // Reduce delay for faster debugging
+    if (!loadingPage) {
+        console.error('loadingPage is missing in DOM');
+        document.body.innerHTML = '<h1>Error: Loading page not found</h1>';
+        return;
+    }
     document.getElementById('loadingPage').style.display = 'flex';
     try {
-        const response = await fetch(`${API_URL}/user_data?user_id=${userId}`);
-        console.log('Response status:', response.status);
+        console.log('Fetching user data from:', `${API_URL}/user_data?user_id=${userId}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+        const response = await fetch(`${API_URL}/user_data?user_id=${userId}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        console.log('Response status:', response.status, 'Headers:', response.headers);
         if (!response.ok) {
             const text = await response.text();
+            console.error('API error response:', text);
             throw new Error(`HTTP ${response.status}: ${text}`);
         }
         const data = await response.json();
         console.log('User data:', data);
         if (data.error || !data.registered) {
-            showPage(document.getElementById('registerPage'));
+            if (!registerPage) {
+                console.error('registerPage is missing in DOM');
+                document.body.innerHTML = '<h1>Error: Register page not found</h1>';
+                return;
+            }
+            showPage(registerPage);
         } else {
-            showPage(document.getElementById('mainPage'));
+            if (!mainPage) {
+                console.error('mainPage is missing in DOM');
+                document.body.innerHTML = '<h1>Error: Main page not found</h1>';
+                return;
+            }
+            showPage(mainPage);
             updatePlayerInfo();
             checkAdminStatus();
         }
     } catch (error) {
         console.error('Registration error:', error.message);
+        if (!errorPage) {
+            console.error('errorPage is missing in DOM');
+            document.body.innerHTML = `<h1>Error: ${error.message}</h1>`;
+            return;
+        }
         showErrorPage(`Failed to check registration: ${error.message}`);
     } finally {
-        document.getElementById('loadingPage').style.display = 'none';
+        if (loadingPage) {
+            document.getElementById('loadingPage').style.display = 'none';
+        }
     }
 }
-
 async function checkAdminStatus() {
     try {
         const response = await fetch(`${API_URL}/user_data?user_id=${userId}`);
