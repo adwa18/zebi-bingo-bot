@@ -356,6 +356,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Contact handler triggered for user {update.effective_user.id}")
     try:
         contact = update.message.contact
         user = update.effective_user
@@ -367,12 +368,20 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove()
         )
     except Exception as e:
-        logger.error(f"Error in contact_handler: {str(e)}")
-        await update.message.reply_text("❌ Error during registration.")
+        logger.error(f"Error in contact_handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error during registration."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Username handler triggered for user {update.effective_user.id}")
     try:
         if 'awaiting_username' not in context.user_data:
+            logger.warning("Username handler called without awaiting_username")
             return
         username = update.message.text.strip()
         if not (3 <= len(username) <= 20):
@@ -408,16 +417,24 @@ async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             release_db_connection(conn)
     except Exception as e:
-        logger.error(f"Error in username_handler: {str(e)}")
-        await update.message.reply_text("❌ Error setting username.")
+        logger.error(f"Error in username_handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error setting username."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
     finally:
         context.user_data.pop('awaiting_username', None)
 
 async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Instructions handler triggered for user {update.effective_user.id}")
     try:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(
-            text="""
+        try:
+            await update.callback_query.edit_message_text(
+                text="""
 📋 **የዜቢ ቢንጎ መመሪያዎች**
 
 🔹 **የመጀመሪያ ደረጃ:**
@@ -446,91 +463,143 @@ async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - ከአጠቃላይ የሽልማት ገንዘብ (ከየአንዳንዱ ጨዋታ): 2 ፐርሰንት ለቤቱ ገቢ ተደርጎ ቀሪው ለአሸናፊው ይላካል
 
 📝 ወደ ምርጡ ጨዋታ ይግቡ!
-            """,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={update.callback_query.from_user.id}"))],
-                [InlineKeyboardButton("💰 Deposit", callback_data='deposit')],
-                [InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]
-            ]),
-            parse_mode='Markdown'
-        )
+                """,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={update.callback_query.from_user.id}"))],
+                    [InlineKeyboardButton("💰 Deposit", callback_data='deposit')],
+                    [InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]
+                ]),
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message: {str(e)}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="📋 **የዜቢ ቢንጎ መመሪያዎች** ...",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={update.callback_query.from_user.id}"))],
+                    [InlineKeyboardButton("💰 Deposit", callback_data='deposit')],
+                    [InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]
+                ]),
+                parse_mode='Markdown'
+            )
     except Exception as e:
-        logger.error(f"Error in instructions: {str(e)}")
-        await update.callback_query.edit_message_text("❌ Error loading instructions.")
+        logger.error(f"Error in instructions handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error loading instructions."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def invite_friends(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Invite friends handler triggered for user {update.effective_user.id}")
     try:
-        query = update.callback_query
-        user_id = query.from_user.id
+        user_id = update.effective_user.id
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT referral_code FROM users WHERE user_id = %s", (user_id,))
                 result = cursor.fetchone()
+                referral_code = result[0] if result else generate_referral_code(user_id)
                 if not result:
-                    await query.edit_message_text("❌ Please register first.")
-                    return
-                referral_code = result[0]
-                cursor.execute("SELECT COUNT(*) FROM referrals WHERE referrer_id = %s", (user_id,))
-                referral_count = cursor.fetchone()[0]
-                bot_username = context.bot.username or "ZebiBingoBot"
-                referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-                invite_text = f"""
-👥 Invite Friends & Earn!
-Invite friends to earn {REFERRAL_BONUS} ETB for every {REFERRAL_THRESHOLD} registrations!
-Your referral link:
-👉 {referral_link} 👈
-Current referrals: {referral_count}
-
-📢 Share this copiable link with friends!
-                """
-                await query.edit_message_text(
-                    text=invite_text,
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                )
+                    cursor.execute(
+                        "UPDATE users SET referral_code = %s WHERE user_id = %s",
+                        (referral_code, user_id)
+                    )
+                    conn.commit()
+                invite_link = f"https://t.me/{context.bot.username}?start=ref_{referral_code}"
+                message = f"👥 Invite friends and earn 10 ETB per referral!\nYour link: {invite_link}"
+                await update.callback_query.answer()
+                try:
+                    await update.callback_query.edit_message_text(
+                        text=message,
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to edit message: {str(e)}")
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=message,
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+                    )
         finally:
             release_db_connection(conn)
     except Exception as e:
-        logger.error(f"Error in invite_friends: {str(e)}")
-        await query.edit_message_text("❌ Error generating invite link.")
+        logger.error(f"Error in invite_friends handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error generating invite link."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def contact_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Contact support handler triggered for user {update.effective_user.id}")
     try:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(
-            "🛟 Contact Support\n\nFor help, contact @ZebiSupportBot\nAvailable 24/7!",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-        )
+        try:
+            await update.callback_query.edit_message_text(
+                text="🛟 Contact Support\n\nFor help, contact @ZebiSupportBot\nAvailable 24/7!",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message: {str(e)}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="🛟 Contact Support\n\nFor help, contact @ZebiSupportBot\nAvailable 24/7!",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+            )
     except Exception as e:
-        logger.error(f"Error in contact_support: {str(e)}")
-        await update.callback_query.edit_message_text("❌ Error contacting support.")
+        logger.error(f"Error in contact_support handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error contacting support."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Check balance handler triggered for user {update.effective_user.id}")
     try:
-        query = update.callback_query
-        user_id = query.from_user.id
+        user_id = update.effective_user.id
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
-                cursor.execute(SELECT_WALLET_QUERY, (user_id,))
-                balance = cursor.fetchone()
-                bonus = check_referral_bonus(user_id)
-                message = f"💰 Your balance: {balance[0]} ETB"
-                if bonus > 0:
-                    message += f"\n🎉 You earned {bonus} ETB for referrals!"
-                await query.edit_message_text(
-                    message,
-                    reply_markup=main_menu_keyboard(user_id)
-                )
+                cursor.execute("SELECT_WALLET_QUERY FROM users WHERE user_id = %s", (user_id,))
+                result = cursor.fetchone()
+                balance = result[0] if result else 0
+                await update.callback_query.answer()
+                try:
+                    await update.callback_query.edit_message_text(
+                        text=f"💰 Your balance: {balance} ETB",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to edit message: {str(e)}")
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=f"💰 Your balance: {balance} ETB",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+                    )
         finally:
             release_db_connection(conn)
     except Exception as e:
-        logger.error(f"Error in check_balance: {str(e)}")
-        await query.edit_message_text("❌ Error checking balance.")
+        logger.error(f"Error in check_balance handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error checking balance."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        query = update.callback_query
+        
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
@@ -547,26 +616,51 @@ async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 leaderboard_text = "🏆 Top 10 Players:\n"
                 for i, (username, score, wallet) in enumerate(leaderboard, 1):
                     leaderboard_text += f"{i}. {username or 'Anonymous'} - {score} points, {wallet} ETB\n"
-                await query.edit_message_text(
+                await update.callback_query.answer()
+                try:
+                    await update.callback_query.edit_message_text(
                     text=leaderboard_text,
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                )
+                    )
         finally:
             release_db_connection(conn)
     except Exception as e:
-        logger.error(f"Error in show_leaderboard: {str(e)}")
-        await query.edit_message_text("❌ Error loading leaderboard.")
+        logger.error(f"Error in leaderboard handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error loading leaderboard."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Deposit handler triggered for user {update.effective_user.id}")
     try:
-        await update.callback_query.edit_message_text(
-            "💰 Enter deposit amount in Birr:",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-        )
-        context.user_data['awaiting_deposit'] = True
+        await update.callback_query.answer()
+        try:
+            await update.callback_query.edit_message_text(
+                text="💳 Please enter the deposit amount (ETB):",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+            )
+            context.user_data['awaiting_deposit'] = True
+        except Exception as e:
+            logger.warning(f"Failed to edit message: {str(e)}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="💳 Please enter the deposit amount (ETB):",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+            )
+            context.user_data['awaiting_deposit'] = True
     except Exception as e:
-        logger.error(f"Error in deposit: {str(e)}")
-        await update.callback_query.edit_message_text("❌ Error initiating deposit.")
+        logger.error(f"Error in deposit handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error initiating deposit."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def process_deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -925,15 +1019,30 @@ async def process_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ Error processing admin input.")
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Back to menu handler triggered for user {update.effective_user.id}")
     try:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(
-            "🎉 Welcome back to ዜቢ ቢንጎ!",
-            reply_markup=main_menu_keyboard(update.effective_user.id)
-        )
+        try:
+            await update.callback_query.edit_message_text(
+                text="🎉 Welcome back to ዜቢ ቢንጎ!",
+                reply_markup=main_menu_keyboard(update.effective_user.id)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to edit message: {str(e)}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="🎉 Welcome back to ዜቢ ቢንጎ!",
+                reply_markup=main_menu_keyboard(update.effective_user.id)
+            )
     except Exception as e:
-        logger.error(f"Error in back_to_menu: {str(e)}")
-        await update.callback_query.edit_message_text("❌ Error returning to menu.")
+        logger.error(f"Error in back_to_menu handler: {str(e)}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error returning to menu."
+            )
+        except Exception as e2:
+            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def process_transaction_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -981,12 +1090,15 @@ async def process_transaction_code(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("❌ Error processing transaction code.")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(f"Update {update} caused error {context.error}")
+    logger.error(f"Update {update} caused error {context.error}", exc_info=True)
     try:
         if update and update.effective_message:
-            await update.effective_message.reply_text("❌ An error occurred. Please try again.")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error occurred. Please try again or contact support."
+            )
     except Exception as e:
-        logger.error(f"Error in error_handler: {str(e)}")
+        logger.error(f"Error in error_handler: {str(e)}", exc_info=True)
 
 
 
