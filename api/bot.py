@@ -295,65 +295,69 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!"
         try:
             if os.path.exists(image_path):
-                await update.message.reply_photo(
-                    photo=InputFile(image_path),
-                    caption=message,
-                    reply_markup=main_menu_keyboard(user.id)
-                )
+                await asyncio.run_coroutine_threadsafe(
+                    update.message.reply_photo(
+                        photo=InputFile(image_path),
+                        caption=message,
+                        reply_markup=main_menu_keyboard(user.id)
+                    ),
+                    loop
+                ).result()
             else:
-                await update.message.reply_text(
-                    text=message,
-                    reply_markup=main_menu_keyboard(user.id)
-                )
+                await asyncio.run_coroutine_threadsafe(
+                    update.message.reply_text(
+                        text=message,
+                        reply_markup=main_menu_keyboard(user.id)
+                    ),
+                    loop
+                ).result()
         except Exception as e:
             logger.error(f"Error sending message in start handler: {str(e)}", exc_info=True)
-            # Fallback to sending via bot directly
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=message,
-                reply_markup=main_menu_keyboard(user.id)
-            )
+            await asyncio.run_coroutine_threadsafe(
+                context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=message,
+                    reply_markup=main_menu_keyboard(user.id)
+                ),
+                loop
+            ).result()
     except Exception as e:
         logger.error(f"Error in start handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error occurred. Please try again."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Register handler triggered for user {update.effective_user.id}")
     try:
-        await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.answer(),
+            loop
+        ).result()
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.edit_message_text(
                 text="ለመቀጠል ስልክ ቁጥሮን ያጋሩ!",
                 reply_markup=ReplyKeyboardMarkup([
                     [KeyboardButton("📲 Share Contact", request_contact=True)]
                 ], resize_keyboard=True, one_time_keyboard=True)
-            )
-        except Exception as e:
-            logger.warning(f"Failed to edit message: {str(e)}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="ለመቀጠል ስልክ ቁጥሮን ያጋሩ!",
-                reply_markup=ReplyKeyboardMarkup([
-                    [KeyboardButton("📲 Share Contact", request_contact=True)]
-                ], resize_keyboard=True, one_time_keyboard=True)
-            )
+            ),
+            loop
+        ).result()
     except Exception as e:
         logger.error(f"Error in register handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error initiating registration."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Contact handler triggered for user {update.effective_user.id}")
@@ -363,19 +367,22 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['phone'] = contact.phone_number
         context.user_data['name'] = contact.first_name or user.username
         context.user_data['awaiting_username'] = True
-        await update.message.reply_text(
-            "Please enter your desired username:",
-            reply_markup=ReplyKeyboardRemove()
-        )
+        await asyncio.run_coroutine_threadsafe(
+            update.message.reply_text(
+                "Please enter your desired username:",
+                reply_markup=ReplyKeyboardRemove()
+            ),
+            loop
+        ).result()
     except Exception as e:
         logger.error(f"Error in contact_handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error during registration."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Username handler triggered for user {update.effective_user.id}")
@@ -385,7 +392,10 @@ async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         username = update.message.text.strip()
         if not (3 <= len(username) <= 20):
-            await update.message.reply_text("❌ Username must be 3-20 characters. Try again:")
+            await asyncio.run_coroutine_threadsafe(
+                update.message.reply_text("❌ Username must be 3-20 characters. Try again:"),
+                loop
+            ).result()
             return
         conn = get_db_connection()
         try:
@@ -393,12 +403,12 @@ async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 referral_code = generate_referral_code(update.effective_user.id)
                 cursor.execute(
                     """
-                    INSERT INTO users (user_id, phone, name, username, referral_code, wallet)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO users (user_id, phone, name, username, referral_code, wallet, score, role)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (user_id) DO NOTHING
                     """,
                     (update.effective_user.id, context.user_data['phone'], context.user_data['name'],
-                     username, referral_code, INITIAL_WALLET)
+                     username, referral_code, INITIAL_WALLET, 0, 'user')
                 )
                 if cursor.rowcount == 0:
                     cursor.execute(
@@ -410,28 +420,37 @@ async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message = f"🎉 Registration successful, {username}! {INITIAL_WALLET} ETB credited."
                 if bonus > 0:
                     message += f"\nYou earned {bonus} ETB for referrals!"
-                await update.message.reply_text(
-                    message,
-                    reply_markup=main_menu_keyboard(update.effective_user.id)
-                )
+                await asyncio.run_coroutine_threadsafe(
+                    update.message.reply_text(
+                        message,
+                        reply_markup=main_menu_keyboard(update.effective_user.id)
+                    ),
+                    loop
+                ).result()
         finally:
             release_db_connection(conn)
             context.user_data.pop('awaiting_username', None)
     except Exception as e:
         logger.error(f"Error in username_handler: {str(e)}", exc_info=True)
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="❌ Error setting username."
-        )
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error setting username."
+            ),
+            loop
+        ).result()
         
         
 
 async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Instructions handler triggered for user {update.effective_user.id}")
     try:
-        await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.answer(),
+            loop
+        ).result()
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.edit_message_text(
                 text="""
 📋 **የዜቢ ቢንጎ መመሪያዎች**
 
@@ -468,28 +487,18 @@ async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]
                 ]),
                 parse_mode='Markdown'
-            )
-        except Exception as e:
-            logger.warning(f"Failed to edit message: {str(e)}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="📋 **የዜቢ ቢንጎ መመሪያዎች** ...",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={update.callback_query.from_user.id}"))],
-                    [InlineKeyboardButton("💰 Deposit", callback_data='deposit')],
-                    [InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]
-                ]),
-                parse_mode='Markdown'
-            )
+            ),
+            loop
+        ).result()
     except Exception as e:
         logger.error(f"Error in instructions handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error loading instructions."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def invite_friends(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Invite friends handler triggered for user {update.effective_user.id}")
@@ -509,56 +518,52 @@ async def invite_friends(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     conn.commit()
                 invite_link = f"https://t.me/{context.bot.username}?start=ref_{referral_code}"
                 message = f"👥 Invite friends and earn 10 ETB per referral!\nYour link: {invite_link}"
-                await update.callback_query.answer()
-                try:
-                    await update.callback_query.edit_message_text(
+                await asyncio.run_coroutine_threadsafe(
+                    update.callback_query.answer(),
+                    loop
+                ).result()
+                await asyncio.run_coroutine_threadsafe(
+                    update.callback_query.edit_message_text(
                         text=message,
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to edit message: {str(e)}")
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=message,
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                    )
+                    ),
+                    loop
+                ).result()
         finally:
             release_db_connection(conn)
     except Exception as e:
         logger.error(f"Error in invite_friends handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error generating invite link."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def contact_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Contact support handler triggered for user {update.effective_user.id}")
     try:
-        await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(
+        # Run callback query answer in the event loop
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.answer(), loop
+        ).result()
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.edit_message_text(
                 text="🛟 Contact Support\n\nFor help, contact @ZebiSupportBot\nAvailable 24/7!",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-            )
-        except Exception as e:
-            logger.warning(f"Failed to edit message: {str(e)}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="🛟 Contact Support\n\nFor help, contact @ZebiSupportBot\nAvailable 24/7!",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-            )
+            ),
+            loop
+        ).result()
     except Exception as e:
         logger.error(f"Error in contact_support handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error contacting support."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Check balance handler triggered for user {update.effective_user.id}")
@@ -567,33 +572,31 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT_WALLET_QUERY FROM users WHERE user_id = %s", (user_id,))
+                cursor.execute("SELECT wallet FROM users WHERE user_id = %s", (user_id,))
                 result = cursor.fetchone()
                 balance = result[0] if result else 0
-                await update.callback_query.answer()
-                try:
-                    await update.callback_query.edit_message_text(
+                await asyncio.run_coroutine_threadsafe(
+                    update.callback_query.answer(),
+                    loop
+                ).result()
+                await asyncio.run_coroutine_threadsafe(
+                    update.callback_query.edit_message_text(
                         text=f"💰 Your balance: {balance} ETB",
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to edit message: {str(e)}")
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=f"💰 Your balance: {balance} ETB",
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                    )
+                    ),
+                    loop
+                ).result()
         finally:
             release_db_connection(conn)
     except Exception as e:
         logger.error(f"Error in check_balance handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error checking balance."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Leaderboard handler triggered for user {update.effective_user.id}")
@@ -614,55 +617,53 @@ async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 leaderboard_text = "🏆 Top 10 Players:\n"
                 for i, (username, score, wallet) in enumerate(leaderboard, 1):
                     leaderboard_text += f"{i}. {username or 'Anonymous'} - {score} points, {wallet} ETB\n"
-                await update.callback_query.answer()
-                try:
-                    await update.callback_query.edit_message_text(
+                await asyncio.run_coroutine_threadsafe(
+                    update.callback_query.answer(),
+                    loop
+                ).result()
+                await asyncio.run_coroutine_threadsafe(
+                    update.callback_query.edit_message_text(
                         text=leaderboard_text,
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to edit message: {str(e)}")
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=leaderboard_text,
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-                    )
+                    ),
+                    loop
+                ).result()
         finally:
             release_db_connection(conn)
     except Exception as e:
         logger.error(f"Error in leaderboard handler: {str(e)}", exc_info=True)
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="❌ Error loading leaderboard."
-        )
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error loading leaderboard."
+            ),
+            loop
+        ).result()
 
 async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Deposit handler triggered for user {update.effective_user.id}")
     try:
-        await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.answer(),
+            loop
+        ).result()
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.edit_message_text(
                 text="💳 Please enter the deposit amount (ETB):",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-            )
-            context.user_data['awaiting_deposit'] = True
-        except Exception as e:
-            logger.warning(f"Failed to edit message: {str(e)}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="💳 Please enter the deposit amount (ETB):",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
-            )
-            context.user_data['awaiting_deposit'] = True
+            ),
+            loop
+        ).result()
+        context.user_data['awaiting_deposit'] = True
     except Exception as e:
         logger.error(f"Error in deposit handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error initiating deposit."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def process_deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -1023,82 +1024,89 @@ async def process_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Back to menu handler triggered for user {update.effective_user.id}")
     try:
-        await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.answer(),
+            loop
+        ).result()
+        await asyncio.run_coroutine_threadsafe(
+            update.callback_query.edit_message_text(
                 text="🎉 Welcome back to ዜቢ ቢንጎ!",
                 reply_markup=main_menu_keyboard(update.effective_user.id)
-            )
-        except Exception as e:
-            logger.warning(f"Failed to edit message: {str(e)}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="🎉 Welcome back to ዜቢ ቢንጎ!",
-                reply_markup=main_menu_keyboard(update.effective_user.id)
-            )
+            ),
+            loop
+        ).result()
     except Exception as e:
         logger.error(f"Error in back_to_menu handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error returning to menu."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+            ),
+            loop
+        ).result()
 
 async def process_transaction_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Process transaction code handler triggered for user {update.effective_user.id}")
     try:
-        text = update.message.text
+        transaction_code = update.message.text.strip()
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT user_id, amount FROM transactions WHERE verification_code = %s AND status = 'pending'",
-                    (text,)
+                    """
+                    SELECT transaction_id, amount, status
+                    FROM transactions
+                    WHERE transaction_id = %s AND user_id = %s AND status = 'pending'
+                    """,
+                    (transaction_code, update.effective_user.id)
                 )
-                tx = cursor.fetchone()
-                if tx:
-                    user_id, amount = tx
-                    cursor.execute(
-                        "UPDATE transactions SET status = 'verified' WHERE verification_code = %s",
-                        (text,)
-                    )
-                    cursor.execute(UPDATE_WALLET_CREDIT_QUERY, (amount, user_id))
-                    cursor.execute(
-                        "SELECT referrer_id FROM referrals WHERE referee_id = %s AND NOT bonus_credited",
-                        (user_id,)
-                    )
-                    referrer = cursor.fetchone()
-                    if referrer:
-                        cursor.execute(UPDATE_WALLET_CREDIT_QUERY, (REFERRAL_BONUS, referrer[0]))
-                        cursor.execute(
-                            "UPDATE referrals SET bonus_credited = TRUE WHERE referee_id = %s",
-                            (user_id,)
-                        )
-                    conn.commit()
-                    await update.message.reply_text(
-                        f"✅ Deposit of {amount} ETB verified!",
-                        reply_markup=main_menu_keyboard(user_id)
-                    )
-                else:
-                    await update.message.reply_text(
-                        "❌ Invalid or already processed transaction code.",
+                result = cursor.fetchone()
+                if not result:
+                    await asyncio.run_coroutine_threadsafe(
+                        update.message.reply_text("❌ Invalid or already processed transaction code."),
+                        loop
+                    ).result()
+                    return
+                transaction_id, amount, _ = result
+                cursor.execute(
+                    "UPDATE transactions SET status = 'completed' WHERE transaction_id = %s",
+                    (transaction_id,)
+                )
+                cursor.execute(
+                    "UPDATE users SET wallet = wallet + %s WHERE user_id = %s",
+                    (amount, update.effective_user.id)
+                )
+                conn.commit()
+                await asyncio.run_coroutine_threadsafe(
+                    update.message.reply_text(
+                        f"✅ Transaction successful! {amount} ETB added to your wallet.",
                         reply_markup=main_menu_keyboard(update.effective_user.id)
-                    )
+                    ),
+                    loop
+                ).result()
         finally:
             release_db_connection(conn)
     except Exception as e:
-        logger.error(f"Error in process_transaction_code: {str(e)}")
-        await update.message.reply_text("❌ Error processing transaction code.")
+        logger.error(f"Error in process_transaction_code handler: {str(e)}", exc_info=True)
+        await asyncio.run_coroutine_threadsafe(
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error processing transaction code."
+            ),
+            loop
+        ).result()
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}", exc_info=True)
     try:
         if update and update.effective_message:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Error occurred. Please try again or contact support."
-            )
+            await asyncio.run_coroutine_threadsafe(
+                context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="❌ Error occurred. Please try again or contact support."
+                ),
+                loop
+            ).result()
     except Exception as e:
         logger.error(f"Error in error_handler: {str(e)}", exc_info=True)
 
@@ -1136,10 +1144,11 @@ async def init_application():
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_deposit_amount), group=2)
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_admin_input), group=3)
         application.add_error_handler(error_handler)
-        await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
+        await asyncio.run_coroutine_threadsafe(
+            application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook"),
+            loop
+        ).result()
         logger.info(f"Webhook set to {WEB_APP_URL}/api/webhook")
-        
-
     except Exception as e:
         logger.error(f"Failed to initialize application: {str(e)}", exc_info=True)
         raise
@@ -1160,33 +1169,22 @@ async def webhook():
             logger.error("Empty webhook data")
             return jsonify({'error': 'Empty webhook data'}), 400
         if not application or not hasattr(application, 'bot'):
-            logger.info("Reinitializing application due to missing instance")
+            logger.info("Reinitializing application")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             await init_application()
-        required_fields = ['update_id']
-        if not all(field in data for field in required_fields):
-            logger.error(f"Missing required fields in webhook data: {required_fields}")
-            return jsonify({'error': f'Missing required fields: {required_fields}'}), 400
-        try:
-            update = Update.de_json(data, application.bot)
-            if not update:
-                logger.error("Failed to parse update data")
-                return jsonify({'error': 'Invalid update data'}), 400
-            await application.process_update(update)
-            return jsonify({'status': 'ok'})
-        except RuntimeError as e:
-            logger.error(f"Event loop error in webhook: {str(e)}", exc_info=True)
-            # Reinitialize application to recover
-            await init_application()
-            update = Update.de_json(data, application.bot)
-            await application.process_update(update)
-            return jsonify({'status': 'ok'})
-        except Exception as e:
-            logger.error(f"Error parsing update: {str(e)}", exc_info=True)
-            return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+        update = Update.de_json(data, application.bot)
+        if not update:
+            logger.error("Failed to parse update data")
+            return jsonify({'error': 'Invalid update data'}), 400
+        await asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        ).result()
+        return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}", exc_info=True)
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
-
 
 
 # --- API Endpoints ---
