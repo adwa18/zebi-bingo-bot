@@ -4,46 +4,52 @@ if (tg) {
     tg.expand();
     tg.setViewportHeight(window.innerHeight);
 }
-const userId = (tg?.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('user_id'))?.toString();
-const API_URL = '/api';
-const playerInfo = document.getElementById('playerInfo');
+
+
 let gameId = null;
 let selectedNumber = null;
 let currentBet = null;
 
-// Validate userId
-if (!userId) {
-    console.error('No user ID found');
-    showErrorPage('User ID is missing');
-    return;
-}
+(function () {
+    const tg = window.Telegram?.WebApp;
+    const userId = (tg?.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('user_id'))?.toString();
+    if (!userId) {
+        console.error('No user ID found');
+        showErrorPage('User ID is missing');
+        return; // Now valid inside a function
+    }
 
 // DOM Elements
+const API_URL = '/api';
 const welcomePage = document.getElementById('welcomePage');
+const loadingPage = document.getElementById('loadingPage');
+const errorPage = document.getElementById('errorPage');
 const registerPage = document.getElementById('registerPage');
-const returnToBotBtn = document.getElementById('returnBtn');
-const checkBalanceBtn = document.getElementById('checkBalance');
-const withdrawMoneyBtn = document.getElementById('withdrawMoney');
-const topLeadersBtn = document.getElementById('topLeaders');
-const inviteFriendsBtn = document.getElementById('inviteFriends');
-const adminMenuBtn = document.getElementById('adminMenuBtn');
-if (!adminMenuBtn) {
-    console.error('adminMenuBtn not found');
-}
+const mainPage = document.getElementById('mainPage');
 const gameArea = document.getElementById('gameArea');
+const playerInfo = document.getElementById('playerInfo');
+const startBtn = document.getElementById('startBtn');
+const registerBtn = document.getElementById('registerBtn');
+const registerError = document.getElementById('registerError');
+const joinBtn = document.getElementById('joinBtn');
 const bingoCard = document.getElementById('bingoCard');
+const calledNumbersDiv = document.getElementById('calledNumbers');
 const gameStatus = document.getElementById('gameStatus');
 const callBtn = document.getElementById('callBtn');
 const bingoBtn = document.getElementById('bingoBtn');
 const contentDiv = document.getElementById('content');
-const calledNumbersDiv = document.getElementById('calledNumbers');
+const checkBalanceBtn = document.getElementById('checkBalance');
+const withdrawMoneyBtn = document.getElementById('withdrawMoney');
+const topLeadersBtn = document.getElementById('topLeaders');
+const inviteFriendsBtn = document.getElementById('inviteFriends');
+const returnBtn = document.getElementById('returnBtn');
 const nightModeSwitch = document.getElementById('nightModeSwitch');
-const devInfo = document.getElementById('devInfo');
-const loadingPage = document.getElementById('loadingPage');
-const errorPage = document.getElementById('errorPage');
-const startBtn = document.getElementById('startBtn');
-const registerBtn = document.getElementById('registerBtn');
+const adminMenuBtn = document.getElementById('adminMenuBtn');
+if (!adminMenuBtn) {
+    console.error('adminMenuBtn not found');
+}
 
+const devInfo = document.getElementById('devInfo');
 
 function showPage(page) {
     document.querySelectorAll('.content').forEach(p => {
