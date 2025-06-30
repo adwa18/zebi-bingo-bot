@@ -596,8 +596,8 @@ async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
 
 async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Leaderboard handler triggered for user {update.effective_user.id}")
     try:
-        
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor:
@@ -617,20 +617,24 @@ async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.callback_query.answer()
                 try:
                     await update.callback_query.edit_message_text(
-                    text=leaderboard_text,
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+                        text=leaderboard_text,
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to edit message: {str(e)}")
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=leaderboard_text,
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]])
                     )
         finally:
             release_db_connection(conn)
     except Exception as e:
         logger.error(f"Error in leaderboard handler: {str(e)}", exc_info=True)
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Error loading leaderboard."
-            )
-        except Exception as e2:
-            logger.error(f"Error in fallback message: {str(e2)}", exc_info=True)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="❌ Error loading leaderboard."
+        )
 
 async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Deposit handler triggered for user {update.effective_user.id}")
