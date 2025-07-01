@@ -239,11 +239,35 @@ def check_referral_bonus(user_id):
 
 # --- Telegram Bot Handlers ---
 def main_menu_keyboard(user_id):
+    # Check cache with timeout (e.g., 5 minutes)
+    if user_id in user_registration_cache:
+        registered, timestamp = user_registration_cache[user_id]
+        if (asyncio.get_event_loop().time() - timestamp) < 300:
+            logger.info(f"User {user_id} registration cache hit: {registered}")
+            keyboard = []
+            if registered:
+                keyboard.extend([
+                    [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={user_id}"))],
+                    [InlineKeyboardButton("💰 Check Balance", callback_data='check_balance')],
+                    [InlineKeyboardButton("🏆 Leaderboard", callback_data='leaderboard')],
+                    [InlineKeyboardButton("💳 Deposit", callback_data='deposit')],
+                    [InlineKeyboardButton("👥 Invite Friends", callback_data='invite')],
+                    [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
+                    [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
+                ])
+            else:
+                keyboard.extend([
+                    [InlineKeyboardButton("📝 Register", callback_data='register')],
+                    [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
+                    [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
+                ])
+            return InlineKeyboardMarkup(keyboard)
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
             registered = cursor.fetchone() is not None
+            user_registration_cache[user_id] = (registered, asyncio.get_event_loop().time())
             logger.info(f"User {user_id} registered: {registered}")
             keyboard = []
             if registered:
@@ -287,20 +311,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except ValueError:
                 logger.warning(f"Invalid referral code: {context.args[0]}")
         message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!"
-        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.jpg')
         reply_markup = main_menu_keyboard(user.id)
+        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.jpg')
         try:
-            if os.path.exists(image_path):
+            async with aiofiles.open(image_path, 'rb') as f:
                 await update.message.reply_photo(
-                    photo=InputFile(image_path),
+                    photo=InputFile(f),
                     caption=message,
                     reply_markup=reply_markup
                 )
-            else:
-                await update.message.reply_text(
-                    text=message,
-                    reply_markup=reply_markup
-                )
+        except FileNotFoundError:
+            await update.message.reply_text(
+                text=message,
+                reply_markup=reply_markup
+            )
         except Exception as e:
             logger.error(f"Error sending message in start handler: {str(e)}", exc_info=True)
             await context.bot.send_message(
