@@ -100,7 +100,7 @@ def release_db_connection(conn):
 def init_db():
     global db_pool
     try:
-        db_pool = psycopg2.pool.SimpleConnectionPool(1, 10, DATABASE_URL)
+        db_pool = psycopg2.pool.SimpleConnectionPool(1, 5, DATABASE_URL)
         if not db_pool:
             raise Exception("Failed to create database connection pool")
         logger.info("Database pool initialized")
@@ -126,13 +126,13 @@ def init_db():
                 ''', (INITIAL_WALLET,))
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS transactions (
-                        tx_id TEXT PRIMARY KEY,
+                        transaction_id SERIAL PRIMARY KEY,
                         user_id BIGINT,
-                        amount INTEGER,
-                        method TEXT,
+                        amount INTEGER NOT NULL,
+                        transaction_type TEXT NOT NULL,
                         status TEXT DEFAULT 'pending',
-                        verification_code TEXT,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(user_id)
                     );
                     CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
                 ''')
@@ -239,37 +239,32 @@ def check_referral_bonus(user_id):
 
 # --- Telegram Bot Handlers ---
 def main_menu_keyboard(user_id):
-    conn = None
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
-    
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
             registered = cursor.fetchone() is not None
             logger.info(f"User {user_id} registered: {registered}")
-        keyboard = [
-            [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={user_id}"))] if registered else [],
-            [InlineKeyboardButton("💰 Check Balance", callback_data='check_balance')] if registered else [],
-            [InlineKeyboardButton("🏆 Leaderboard", callback_data='leaderboard')] if registered else [],
-            [InlineKeyboardButton("💳 Deposit", callback_data='deposit')] if registered else [],
-            [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
-            [InlineKeyboardButton("👥 Invite Friends", callback_data='invite')] if registered else [],
-            [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
-        ]
-        if not registered:
-            keyboard.insert(0, [InlineKeyboardButton("📝 Register", callback_data='register')])
-        logger.info(f"Keyboard for user {user_id}: {[btn.text for row in keyboard for btn in row if row]}")
-        return InlineKeyboardMarkup([row for row in keyboard if row])
-    except Exception as e:
-        logger.error(f"Error in main_menu_keyboard for user {user_id}: {str(e)}", exc_info=True)
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton("📝 Register", callback_data='register')],
-            [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
-            [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
-        ])     
+            keyboard = []
+            if registered:
+                keyboard.extend([
+                    [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={user_id}"))],
+                    [InlineKeyboardButton("💰 Check Balance", callback_data='check_balance')],
+                    [InlineKeyboardButton("🏆 Leaderboard", callback_data='leaderboard')],
+                    [InlineKeyboardButton("💳 Deposit", callback_data='deposit')],
+                    [InlineKeyboardButton("👥 Invite Friends", callback_data='invite')],
+                    [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
+                    [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
+                ])
+            else:
+                keyboard.extend([
+                    [InlineKeyboardButton("📝 Register", callback_data='register')],
+                    [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
+                    [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
+                ])
+            return InlineKeyboardMarkup(keyboard)
     finally:
-        if conn:
-            release_db_connection(conn)
+        release_db_connection(conn)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -291,45 +286,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     release_db_connection(conn)
             except ValueError:
                 logger.warning(f"Invalid referral code: {context.args[0]}")
-        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.jpg')
         message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!"
+        image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.jpg')
+        reply_markup = main_menu_keyboard(user.id)
         try:
             if os.path.exists(image_path):
-                await asyncio.run_coroutine_threadsafe(
-                    update.message.reply_photo(
-                        photo=InputFile(image_path),
-                        caption=message,
-                        reply_markup=main_menu_keyboard(user.id)
-                    ),
-                    loop
-                ).result()
+                await update.message.reply_photo(
+                    photo=InputFile(image_path),
+                    caption=message,
+                    reply_markup=reply_markup
+                )
             else:
-                await asyncio.run_coroutine_threadsafe(
-                    update.message.reply_text(
-                        text=message,
-                        reply_markup=main_menu_keyboard(user.id)
-                    ),
-                    loop
-                ).result()
+                await update.message.reply_text(
+                    text=message,
+                    reply_markup=reply_markup
+                )
         except Exception as e:
             logger.error(f"Error sending message in start handler: {str(e)}", exc_info=True)
-            await asyncio.run_coroutine_threadsafe(
-                context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=message,
-                    reply_markup=main_menu_keyboard(user.id)
-                ),
-                loop
-            ).result()
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=message,
+                reply_markup=reply_markup
+            )
     except Exception as e:
         logger.error(f"Error in start handler: {str(e)}", exc_info=True)
-        await asyncio.run_coroutine_threadsafe(
-            context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Error occurred. Please try again."
-            ),
-            loop
-        ).result()
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="❌ Error occurred. Please try again."
+        )
 
 
 
@@ -1116,11 +1100,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def init_application():
     global application, loop, db_pool
     try:
-        # Ensure a single event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         logger.info("Initializing database")
         init_db()
         application = ApplicationBuilder().token(TOKEN).build()
@@ -1138,16 +1119,15 @@ async def init_application():
         application.add_handler(CallbackQueryHandler(deposit, pattern='deposit$'))
         application.add_handler(CallbackQueryHandler(back_to_menu, pattern='back_to_menu$'))
         application.add_handler(CallbackQueryHandler(admin_handler, pattern='admin.*|verify_.*|withdraw_.*|withdraw_action_.*'))
+        application.add_handler(CallbackQueryHandler(show_payment_options, pattern='show_payment_options'))
+        application.add_handler(CallbackQueryHandler(handle_payment_method, pattern='payment_.*'))
         application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^[a-zA-Z0-9]{6}$'), process_transaction_code))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, username_handler), group=1)
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_deposit_amount), group=2)
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_admin_input), group=3)
         application.add_error_handler(error_handler)
-        await asyncio.run_coroutine_threadsafe(
-            application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook"),
-            loop
-        ).result()
+        await application.bot.set_webhook(url=f"{WEB_APP_URL}/api/webhook")
         logger.info(f"Webhook set to {WEB_APP_URL}/api/webhook")
     except Exception as e:
         logger.error(f"Failed to initialize application: {str(e)}", exc_info=True)
@@ -1177,10 +1157,7 @@ async def webhook():
         if not update:
             logger.error("Failed to parse update data")
             return jsonify({'error': 'Invalid update data'}), 400
-        await asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        ).result()
+        await application.process_update(update)
         return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}", exc_info=True)
@@ -1867,10 +1844,8 @@ def serve_static(path):
 if __name__ == '__main__':
     import uvicorn
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(init_application())
         uvicorn.run("bot:app", host="0.0.0.0", port=int(os.environ.get('PORT', 5000)), workers=1)
     except Exception as e:
