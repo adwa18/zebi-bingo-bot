@@ -13,7 +13,7 @@
   ],
   "rewrites": [
     {
-      "source": "/api/webhook",
+      "source": "/api/(.*)",
       "destination": "/api/bot.py"
     },
     {
@@ -31,14 +31,9 @@
       ]
     }
   ],
-  "functions": {
-    "api/bot.py": {
-      "maxDuration": 10
-    }
-  },
   "env": {
     "PYTHON_VERSION": "3.12",
-    "TELEGRAM_BOT_TOKEN": "8184706551:AAH079DGSkLn0efQPqm2yYm5l1Aqg1uiGOk",
+    "TOKEN": "8184706551:AAH079DGSkLn0efQPqm2yYm5l1Aqg1uiGOk",
     "WEB_APP_URL": "https://zebi-bingo-bot.vercel.app",
     "DATABASE_URL": "postgresql://postgres.tfrpctwynrmhlddbwfix:tewodrosephrem@aws-0-eu-west-3.pooler.supabase.com:6543/postgres",
     "ADMIN_IDS": "5380773431"
