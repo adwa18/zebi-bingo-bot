@@ -240,35 +240,11 @@ def check_referral_bonus(user_id):
 # --- Telegram Bot Handlers ---
 def main_menu_keyboard(user_id):
     
-    global user_registration_cache
-    if user_id in user_registration_cache:
-        registered, timestamp = user_registration_cache[user_id]
-        if (asyncio.get_event_loop().time() - timestamp) < 300:
-            logger.info(f"User {user_id} registration cache hit: {registered}")
-            keyboard = []
-            if registered:
-                keyboard.extend([
-                    [InlineKeyboardButton("🎮 Launch Game", web_app=WebAppInfo(url=f"{WEB_APP_URL}?user_id={user_id}"))],
-                    [InlineKeyboardButton("💰 Check Balance", callback_data='check_balance')],
-                    [InlineKeyboardButton("🏆 Leaderboard", callback_data='leaderboard')],
-                    [InlineKeyboardButton("💳 Deposit", callback_data='deposit')],
-                    [InlineKeyboardButton("👥 Invite Friends", callback_data='invite')],
-                    [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
-                    [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
-                ])
-            else:
-                keyboard.extend([
-                    [InlineKeyboardButton("📝 Register", callback_data='register')],
-                    [InlineKeyboardButton("📖 Instructions", callback_data='instructions')],
-                    [InlineKeyboardButton("🛟 Contact Support", callback_data='support')]
-                ])
-            return InlineKeyboardMarkup(keyboard)
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
             registered = cursor.fetchone() is not None
-            user_registration_cache[user_id] = (registered, asyncio.get_event_loop().time())
             logger.info(f"User {user_id} registered: {registered}")
             keyboard = []
             if registered:
@@ -1114,7 +1090,6 @@ async def init_application():
         asyncio.set_event_loop(loop)
         logger.info("Initializing database")
         init_db()
-        user_registration_cache = {}
         application = ApplicationBuilder().token(TOKEN).build()
         await application.initialize()
         logger.info("Application initialized successfully")
