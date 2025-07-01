@@ -239,7 +239,7 @@ def check_referral_bonus(user_id):
 
 # --- Telegram Bot Handlers ---
 def main_menu_keyboard(user_id):
-    # Check cache with timeout (e.g., 5 minutes)
+    
     global user_registration_cache
     if user_id in user_registration_cache:
         registered, timestamp = user_registration_cache[user_id]
@@ -296,21 +296,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Start handler triggered for user {update.effective_user.id}")
     try:
         user = update.effective_user
-        if context.args and context.args[0].startswith('ref_'):
-            try:
-                referrer_id = int(context.args[0][4:])
-                conn = get_db_connection()
-                try:
-                    with conn.cursor() as cursor:
-                        cursor.execute(
-                            "INSERT INTO referrals (referrer_id, referee_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                            (referrer_id, user.id)
-                        )
-                        conn.commit()
-                finally:
-                    release_db_connection(conn)
-            except ValueError:
-                logger.warning(f"Invalid referral code: {context.args[0]}")
         message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends via Web App!"
         reply_markup = main_menu_keyboard(user.id)
         image_path = os.path.join(STATIC_FOLDER, 'bingo_welcome.jpg')
