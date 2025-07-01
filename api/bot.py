@@ -1128,6 +1128,7 @@ async def init_application():
         asyncio.set_event_loop(loop)
         logger.info("Initializing database")
         init_db()
+        user_registration_cache = {}
         application = ApplicationBuilder().token(TOKEN).build()
         await application.initialize()
         logger.info("Application initialized successfully")
