@@ -240,6 +240,7 @@ def check_referral_bonus(user_id):
 # --- Telegram Bot Handlers ---
 def main_menu_keyboard(user_id):
     # Check cache with timeout (e.g., 5 minutes)
+    global user_registration_cache
     if user_id in user_registration_cache:
         registered, timestamp = user_registration_cache[user_id]
         if (asyncio.get_event_loop().time() - timestamp) < 300:
