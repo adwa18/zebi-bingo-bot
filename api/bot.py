@@ -255,8 +255,7 @@ async def username_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    await update.callback_query.edit_message_text(
-        text="📋 የዜቢ ቢንጎ መመሪያዎች\n\n... 
+    instructions_text = """
 📋 **የዜቢ ቢንጎ መመሪያዎች**
 
 🔹 **የመጀመሪያ ደረጃ:**
@@ -285,7 +284,9 @@ async def instructions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - ከአጠቃላይ የሽልማት ገንዘብ (ከየአንዳንዱ ጨዋታ): 2 ፐርሰንት ለቤቱ ገቢ ተደርጎ ቀሪው ለአሸናፊው ይላካል
 
 📝 ወደ ምርጡ ጨዋታ ይግቡ!
- ...",
+"""
+    await update.callback_query.edit_message_text(
+        text=instructions_text,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(BACK_BUTTON_TEXT, callback_data='back_to_menu')]
         ]),
@@ -423,7 +424,7 @@ async def show_payment_options(update: Update, context: ContextTypes.DEFAULT_TYP
 
     except Exception as e:
         logger.error(f"Error showing payment options to user {user_id}: {e}")
-        await update.message.reply_text("❌ Failed to load payment options.
+        await update.message.reply_text("❌ Failed to load payment options. Please try again.")
 
 
 async def handle_payment_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -457,7 +458,6 @@ async def handle_payment_method(update: Update, context: ContextTypes.DEFAULT_TY
 Amount: {amount} ETB
 Reference: {tx_id[-6:]}
 Account: +251944156222
- 
 
 📝 **Instructions:**
 1. Open the Telebirr App
@@ -466,11 +466,9 @@ Account: +251944156222
 4. Enter the exact amount: {amount} Birr
 5. Use the reference code: {tx_id[-6:]} in the note
 6. Complete the transaction
-7. Send the transaction confirmation code here
-                """
-            else:  # CBE
-                payment_details = f"""
-📋 **CBE Payment Details (Copy This):**
+7. Send the transaction confirmation code here"""
+        else:  # CBE
+            payment_details = f"""📋 **CBE Payment Details (Copy This):**
 
 Amount: {amount} ETB
 Reference: {tx_id[-6:]}
@@ -486,9 +484,9 @@ Name: ናትናኤል ዳንኤል
 
 ማሳሰቢያ 📢:
 1. አጭር የጹሁፍ መለክት(sms) ካልደረሳቹ ያለትራንዛክሽን ቁጥር ሲስተሙ ዋሌት ስለማይሞላላቹ የከፈላችሁበትን ደረሰኝ ከባንክ በመቀበል በማንኛውም ሰአት ትራንዛክሽን ቁጥሩን ቦቱ ላይ ማስገባት ትችላላቹ
-2. ዲፖዚት ባረጋቹ ቁጥር ቦቱ የሚያገናኛቹ ኤጀንቶች ስለሚለያዩ ከላይ ወደሚሰጣቹ የኢትዮጵያ ንግድ ባንክ አካውንት ብቻ ብር መላካችሁን እርግጠኛ ይሁኑ።
-                """
-            logger.info(f"User {user_id} selected {method} payment for {amount} ETB")
+2.  ዲፖዚት ባረጋቹ ቁጥር ቦቱ የሚያገናኛቹ ኤጀንቶች ስለሚለያዩ ከላይ ወደሚሰጣቹ የኢትዮጵያ ንግድ ባንክ አካውንት ብቻ ብር መላካችሁን እርግጠኛ ይሁኑ።"""
+
+        logger.info(f"User {user_id} selected {method} payment for {amount} ETB")
         await query.edit_message_text(
             f"✅ Payment method selected\n\n{payment_details}\n"
             "Please complete the payment and send the confirmation.",
