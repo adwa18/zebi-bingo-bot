@@ -184,6 +184,7 @@ def main_menu_keyboard(user_id):
         release_db_connection(conn)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Start handler triggered for user", update.effective_user.id)
     user = update.effective_user
     message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends!"
     reply_markup = main_menu_keyboard(user.id)
