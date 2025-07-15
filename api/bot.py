@@ -54,6 +54,7 @@ def release_db_connection(conn):
 def init_db():
     global db_pool
     if db_pool is not None:
+        logger.info("Database pool already initialized")
         return
     db_pool = psycopg2.pool.SimpleConnectionPool(1, 5, DATABASE_URL)
     conn = get_db_connection()
@@ -158,6 +159,7 @@ def check_referral_bonus(user_id):
 application = None  # Will be initialized in main()
 
 def main_menu_keyboard(user_id):
+    logger.info("Generating main menu for user %s", user_id)
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -184,7 +186,7 @@ def main_menu_keyboard(user_id):
         release_db_connection(conn)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("Start handler triggered for user", update.effective_user.id)
+    logger.info("Start handler triggered for user %s", update.effective_user.id)
     user = update.effective_user
     message = "🎉 Welcome to ዜቢ ቢንጎ! 🎉\n💰 Win prizes\n🎱 Play with friends!"
     reply_markup = main_menu_keyboard(user.id)
@@ -655,6 +657,7 @@ def setup_bot():
     application = ApplicationBuilder().token(TOKEN).build()
     # Register handlers
     application.add_handler(CommandHandler("start", start))
+    logger.info("Registered handlers: %s", application.handlers)
     application.add_handler(CallbackQueryHandler(register, pattern='^register$'))
     application.add_handler(CallbackQueryHandler(instructions, pattern='instructions$'))
     application.add_handler(CallbackQueryHandler(invite_friends, pattern='invite$'))
@@ -671,13 +674,23 @@ app = Flask(__name__)
 
 @app.route('/api/webhook', methods=['POST'])
 def webhook():
-    """Telegram webhook endpoint for Vercel"""
-    global application
-    if application is None:
-        setup_bot()
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return jsonify({'status': 'ok'})
+    try:
+        data = request.get_json(force=True)
+        logger.info("Webhook received: %s", data)
+        global application
+        if application is None:
+            logger.warning("Application not initialized, setting up bot")
+            setup_bot()
+        update = Update.de_json(data, application.bot)
+        if update:
+            logger.info("Processing update ID: %s", update.update_id)
+            application.update_queue.put_nowait(update)
+        else:
+            logger.error("Failed to parse update: %s", data)
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        logger.error("Webhook error: %s", str(e), exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # --- Minimal API Endpoints for WebApp Integration (Database Sharing) ---
 @app.route('/api/user_data', methods=['GET'])
