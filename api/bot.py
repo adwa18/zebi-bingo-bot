@@ -2,9 +2,8 @@ import os
 import logging
 import random
 import string
+import asyncio
 from datetime import datetime, timedelta
-
-from flask import Flask, request, jsonify
 import psycopg2
 from psycopg2 import pool
 
@@ -155,8 +154,6 @@ def check_referral_bonus(user_id):
     finally:
         release_db_connection(conn)
 
-# --- Telegram Bot Logic ---
-application = None  # Will be initialized in main()
 
 def main_menu_keyboard(user_id):
     logger.info("Generating main menu for user %s", user_id)
@@ -652,6 +649,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in error_handler: {str(e)}", exc_info=True)
 
+application = None
 def setup_bot():
     global application
     application = ApplicationBuilder().token(TOKEN).build()
@@ -669,105 +667,19 @@ def setup_bot():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, username_handler), group=1)
     application.add_error_handler(error_handler)
     
-
-# --- Flask App for Vercel ---
-app = Flask(__name__)
-import asyncio
-@app.route('/api/webhook', methods=['POST'])
-def webhook():
+# --- Main ---
+if __name__ == "__main__":
     try:
-        data = request.get_json(force=True)
-        logger.info("Webhook received: %s", data)
-        global application
-        if application is None:
-            logger.warning("Application not initialized, setting up bot")
-            setup_bot()
-        update = Update.de_json(data, application.bot)
-        if update:
-            logger.info("Processing update ID: %s", update.update_id)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            # Initialize PTB Application before processing, only once!
-            if not getattr(application, "_initialized", False):
-                loop.run_until_complete(application.initialize())
-                application._initialized = True
-            loop.run_until_complete(application.process_update(update))
-            loop.close()
-        else:
-            logger.error("Failed to parse update: %s", data)
-        return jsonify({'status': 'ok'})
+        init_db()
+        setup_bot()
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.environ.get("PORT", 10000)),
+            webhook_url=os.environ["WEBHOOK_URL"],
+            url_path="/webhook"
+        )
+        logger.info("Bot started with webhook on port %s", os.environ.get("PORT", 10000))
     except Exception as e:
-        logger.error("Webhook error: %s", str(e), exc_info=True)
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        logger.error("Startup error: %s", str(e), exc_info=True)
+        raise
 
-# --- Minimal API Endpoints for WebApp Integration (Database Sharing) ---
-@app.route('/api/user_data', methods=['GET'])
-def user_data():
-    """Used by the webapp to query user data from the shared DB"""
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id or not user_id.isdigit():
-            return jsonify({'error': 'Valid user_id is required'}), 400
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT wallet, username, role, invalid_bingo_count
-                    FROM users
-                    WHERE user_id = %s
-                    """,
-                    (int(user_id),)
-                )
-                data = cursor.fetchone()
-                if not data:
-                    return jsonify({'error': 'User not found', 'registered': False}), 404
-                bonus = check_referral_bonus(int(user_id))
-                if bonus > 0:
-                    cursor.execute("SELECT wallet FROM users WHERE user_id = %s", (int(user_id),))
-                    data = cursor.fetchone() + data[1:]  # Update wallet after bonus
-                return jsonify({
-                    'wallet': data[0],
-                    'username': data[1],
-                    'role': data[2],
-                    'invalid_bingo_count': data[3],
-                    'registered': True,
-                    'referral_bonus': bonus
-                })
-        finally:
-            release_db_connection(conn)
-    except Exception as e:
-        logger.error(f"Error in user_data: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/api/leaderboard', methods=['GET'])
-def leaderboard():
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT username, score, wallet
-                FROM users
-                WHERE role = 'user'
-                ORDER BY score DESC, wallet DESC
-                LIMIT 10
-                """
-            )
-            leaderboard = [
-                {'username': row[0] or 'Anonymous', 'score': row[1], 'wallet': row[2]}
-                for row in cursor.fetchall()
-            ]
-            return jsonify({'leaders': leaderboard})
-    except Exception as e:
-        logger.error(f"Error in leaderboard: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
-    finally:
-        release_db_connection(conn)
-
-# --- Vercel Entrypoint ---
-# (No need for if __name__ == '__main__': block on Vercel)
-
-# Initialize DB Pool and Bot on cold start
-init_db()
-setup_bot()
