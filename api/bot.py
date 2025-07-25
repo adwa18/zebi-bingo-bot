@@ -685,7 +685,14 @@ def webhook():
         update = Update.de_json(data, application.bot)
         if update:
             logger.info("Processing update ID: %s", update.update_id)
-            asyncio.run(application.process_update(update))
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            # Initialize PTB Application before processing, only once!
+            if not getattr(application, "_initialized", False):
+                loop.run_until_complete(application.initialize())
+                application._initialized = True
+            loop.run_until_complete(application.process_update(update))
+            loop.close()
         else:
             logger.error("Failed to parse update: %s", data)
         return jsonify({'status': 'ok'})
