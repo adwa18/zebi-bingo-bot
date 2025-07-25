@@ -652,7 +652,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in error_handler: {str(e)}", exc_info=True)
 
-import asyncio
 def setup_bot():
     global application
     application = ApplicationBuilder().token(TOKEN).build()
@@ -669,13 +668,11 @@ def setup_bot():
     application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, username_handler), group=1)
     application.add_error_handler(error_handler)
-    asyncio.ensure_future(application.initialize())
-    asyncio.ensure_future(application.start())
-    logger.info("Application initialized and started")
+    
 
 # --- Flask App for Vercel ---
 app = Flask(__name__)
-
+import asyncio
 @app.route('/api/webhook', methods=['POST'])
 def webhook():
     try:
