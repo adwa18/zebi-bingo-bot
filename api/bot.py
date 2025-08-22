@@ -709,13 +709,8 @@ if __name__ == "__main__":
     try:
         init_db()
         setup_bot()
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.environ.get("PORT", 10000)),
-            webhook_url=os.environ["WEBHOOK_URL"],
-            url_path="/webhook"
-        )
-        logger.info("Bot started with webhook on port %s", os.environ.get("PORT", 10000))
+        application.run_polling()
+        logger.info("Bot started with polling")
     except Exception as e:
         logger.error("Startup error: %s", str(e), exc_info=True)
         raise
